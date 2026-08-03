@@ -45,6 +45,8 @@ export default function ClienteDetalle() {
   const deleteCliente = useDeleteCliente();
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [editingAdeudo, setEditingAdeudo] = useState(false);
+  const [adeudoInput, setAdeudoInput] = useState("");
 
   if (isLoading) {
     return <div className="space-y-8">
@@ -89,6 +91,37 @@ export default function ClienteDetalle() {
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const handleSaveAdeudo = async (liquidado: boolean) => {
+    const monto = parseFloat(adeudoInput.replace(/,/g, ""));
+    try {
+      await fetch(`${BASE()}/api/clientes/${id}/adeudo`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ adeudoMonto: isNaN(monto) ? null : monto, adeudoLiquidado: liquidado }),
+      });
+      queryClient.invalidateQueries({ queryKey: getGetClienteQueryKey(id) });
+      setEditingAdeudo(false);
+      toast({ title: "Adeudo actualizado" });
+    } catch {
+      toast({ variant: "destructive", title: "Error al guardar el adeudo" });
+    }
+  };
+
+  const handleToggleLiquidado = async () => {
+    const current = cliente.adeudoLiquidado ?? false;
+    try {
+      await fetch(`${BASE()}/api/clientes/${id}/adeudo`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ adeudoMonto: cliente.adeudoMonto ?? null, adeudoLiquidado: !current }),
+      });
+      queryClient.invalidateQueries({ queryKey: getGetClienteQueryKey(id) });
+      toast({ title: !current ? "Marcada como liquidada" : "Marcada como pendiente" });
+    } catch {
+      toast({ variant: "destructive", title: "Error al actualizar" });
     }
   };
 
@@ -279,27 +312,88 @@ export default function ClienteDetalle() {
         <div className="space-y-6">
 
           {/* Adeudo */}
-          <Card className={`shadow-sm border-t-4 ${saldo > 0 ? "border-t-destructive" : "border-t-primary"}`}>
-            <CardContent className="p-8 text-center bg-muted/10">
-              <div className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-2">Adeudo al día</div>
-              <div className="text-xs text-muted-foreground mb-4 font-medium">
-                {format(new Date(), "dd 'de' MMMM 'de' yyyy")}
-              </div>
-              <div className={`text-5xl font-black tracking-tight ${saldo > 0 ? "text-destructive" : "text-foreground"}`}>
-                {formatMoney(saldo)}
-              </div>
-              {saldo > 0 && (
-                <Badge variant="destructive" className="mt-4 px-3 py-1 text-xs uppercase tracking-wider font-bold">
-                  Pendiente de pago
-                </Badge>
-              )}
-              {saldo === 0 && (
-                <Badge className="mt-4 px-3 py-1 text-xs uppercase tracking-wider font-bold bg-emerald-100 text-emerald-800 hover:bg-emerald-100">
-                  Al corriente
-                </Badge>
-              )}
-            </CardContent>
-          </Card>
+          {(() => {
+            const monto = cliente.adeudoMonto ?? null;
+            const liquidado = cliente.adeudoLiquidado ?? false;
+            const tieneAdeudo = monto !== null;
+            return (
+              <Card className={`shadow-sm border-t-4 ${liquidado ? "border-t-emerald-500" : tieneAdeudo ? "border-t-destructive" : "border-t-primary"}`}>
+                <CardHeader className="pb-3 border-b bg-muted/10 flex flex-row items-center justify-between">
+                  <CardTitle className="text-base font-bold">Adeudo</CardTitle>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 px-3 text-xs"
+                    onClick={() => {
+                      setAdeudoInput(monto != null ? String(monto) : "");
+                      setEditingAdeudo(true);
+                    }}
+                  >
+                    <Edit className="h-3 w-3 mr-1" /> Editar
+                  </Button>
+                </CardHeader>
+                <CardContent className="p-6 text-center space-y-4">
+                  {editingAdeudo ? (
+                    <div className="space-y-4">
+                      <div>
+                        <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block mb-2">Monto del adeudo</label>
+                        <div className="flex items-center gap-2">
+                          <span className="text-lg font-bold text-muted-foreground">$</span>
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            placeholder="0.00"
+                            value={adeudoInput}
+                            onChange={(e) => setAdeudoInput(e.target.value)}
+                            className="flex-1 h-12 text-xl font-bold font-mono border border-border rounded-lg px-3 focus:outline-none focus:ring-2 focus:ring-primary/40 text-center"
+                            autoFocus
+                          />
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button size="sm" className="flex-1 bg-destructive hover:bg-destructive/90" onClick={() => handleSaveAdeudo(false)}>
+                          Guardar — Pendiente
+                        </Button>
+                        <Button size="sm" className="flex-1 bg-emerald-600 hover:bg-emerald-700" onClick={() => handleSaveAdeudo(true)}>
+                          Guardar — Liquidada
+                        </Button>
+                      </div>
+                      <Button variant="ghost" size="sm" className="w-full text-muted-foreground" onClick={() => setEditingAdeudo(false)}>
+                        Cancelar
+                      </Button>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="text-xs text-muted-foreground font-medium">
+                        {format(new Date(), "dd 'de' MMMM 'de' yyyy")}
+                      </div>
+                      {tieneAdeudo ? (
+                        <div className={`text-5xl font-black tracking-tight ${liquidado ? "text-emerald-600" : "text-destructive"}`}>
+                          {formatMoney(Number(monto))}
+                        </div>
+                      ) : (
+                        <div className="text-2xl font-semibold text-muted-foreground/50 py-2">—</div>
+                      )}
+                      <button
+                        onClick={tieneAdeudo ? handleToggleLiquidado : undefined}
+                        disabled={!tieneAdeudo}
+                        className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider transition-colors ${
+                          liquidado
+                            ? "bg-emerald-100 text-emerald-800 hover:bg-emerald-200 cursor-pointer"
+                            : tieneAdeudo
+                            ? "bg-red-100 text-red-800 hover:bg-red-200 cursor-pointer"
+                            : "bg-muted text-muted-foreground cursor-default"
+                        }`}
+                      >
+                        {liquidado ? "✓ Liquidada" : tieneAdeudo ? "Pendiente de pago" : "Sin adeudo registrado"}
+                      </button>
+                    </>
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })()}
 
           {/* Hoja de conceptos */}
           <Card className="shadow-sm">

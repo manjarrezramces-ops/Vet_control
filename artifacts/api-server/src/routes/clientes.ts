@@ -135,6 +135,20 @@ router.get("/clientes/:clienteId", async (req, res): Promise<void> => {
   res.json(GetClienteResponse.parse(payload));
 });
 
+// PATCH /clientes/:clienteId/adeudo
+router.patch("/clientes/:clienteId/adeudo", async (req, res): Promise<void> => {
+  const clienteId = parseInt(Array.isArray(req.params.clienteId) ? req.params.clienteId[0] : req.params.clienteId, 10);
+  if (isNaN(clienteId)) { res.status(404).json({ error: "Not found" }); return; }
+  const { adeudoMonto, adeudoLiquidado } = req.body as { adeudoMonto: number | null; adeudoLiquidado: boolean };
+  const [updated] = await db
+    .update(clientesTable)
+    .set({ adeudoMonto: adeudoMonto != null ? String(adeudoMonto) : null, adeudoLiquidado: adeudoLiquidado ?? false })
+    .where(eq(clientesTable.id, clienteId))
+    .returning();
+  if (!updated) { res.status(404).json({ error: "Cliente no encontrado" }); return; }
+  res.json({ adeudoMonto: updated.adeudoMonto != null ? Number(updated.adeudoMonto) : null, adeudoLiquidado: updated.adeudoLiquidado });
+});
+
 // PATCH /clientes/:clienteId/hoja-conceptos
 router.patch("/clientes/:clienteId/hoja-conceptos", async (req, res): Promise<void> => {
   const clienteId = parseInt(Array.isArray(req.params.clienteId) ? req.params.clienteId[0] : req.params.clienteId, 10);

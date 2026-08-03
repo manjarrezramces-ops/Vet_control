@@ -1,4 +1,4 @@
-import { pgTable, serial, text, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, timestamp, numeric, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -13,6 +13,8 @@ export const clientesTable = pgTable("clientes", {
   direccion: text("direccion"),
   notas: text("notas"),
   hojaConceptos: text("hoja_conceptos"),
+  adeudoMonto: numeric("adeudo_monto", { precision: 12, scale: 2 }),
+  adeudoLiquidado: boolean("adeudo_liquidado").notNull().default(false),
   creadoEn: timestamp("creado_en", { withTimezone: true }).notNull().defaultNow(),
 });
 

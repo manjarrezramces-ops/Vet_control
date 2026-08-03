@@ -126,6 +126,8 @@ export const GetClienteResponse = zod.object({
   "direccion": zod.string().nullish(),
   "notas": zod.string().nullish(),
   "hojaConceptos": zod.string().nullish(),
+  "adeudoMonto": zod.number().nullish(),
+  "adeudoLiquidado": zod.boolean(),
   "creadoEn": zod.string()
 }),
   "saldo": zod.number(),
