@@ -280,7 +280,7 @@ export default function MovimientoNuevo() {
                       name="importe"
                       render={({ field }) => (
                         <FormItem className="bg-primary/5 p-4 rounded-xl border border-primary/20">
-                          <FormLabel className="text-base font-bold text-primary">Importe Transaccional ($) <span className="text-destructive">*</span></FormLabel>
+                          <FormLabel className="text-base font-bold text-primary">Monto ($) <span className="text-destructive">*</span></FormLabel>
                           <FormControl>
                             <Input className="h-14 text-2xl font-black font-mono text-primary bg-white shadow-sm mt-2" type="number" step="0.01" min="0" placeholder="0.00" {...field} />
                           </FormControl>
@@ -294,19 +294,17 @@ export default function MovimientoNuevo() {
                       name="metodoPago"
                       render={({ field }) => (
                         <FormItem className={isPago ? "bg-emerald-50 p-4 rounded-xl border border-emerald-200" : ""}>
-                          <FormLabel className={`text-base font-bold ${isPago ? 'text-emerald-700' : ''}`}>Método / Vía Financiera {isPago && <span className="text-destructive">*</span>}</FormLabel>
+                          <FormLabel className={`text-base font-bold ${isPago ? 'text-emerald-700' : ''}`}>Método de pago {isPago && <span className="text-destructive">*</span>}</FormLabel>
                           <Select onValueChange={field.onChange} defaultValue={field.value}>
                             <FormControl>
                               <SelectTrigger className={`h-14 text-base mt-2 shadow-sm ${isPago ? 'bg-white font-medium border-emerald-200' : ''}`}>
-                                <SelectValue placeholder="Seleccione un método" />
+                                <SelectValue placeholder="Seleccionar..." />
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              <SelectItem value="Efectivo" className="font-medium">Dinero Físico (Efectivo)</SelectItem>
-                              <SelectItem value="Tarjeta" className="font-medium">Tarjeta Terminal Bancaria</SelectItem>
-                              <SelectItem value="Transferencia" className="font-medium">Transferencia SPEI</SelectItem>
-                              <SelectItem value="Deposito" className="font-medium">Depósito en Ventanilla</SelectItem>
-                              <SelectItem value="Otro" className="font-medium">Otros Modelos</SelectItem>
+                              <SelectItem value="Efectivo" className="font-medium">Efectivo</SelectItem>
+                              <SelectItem value="Transferencia" className="font-medium">Transferencia</SelectItem>
+                              <SelectItem value="Mixto" className="font-medium">Mixto</SelectItem>
                             </SelectContent>
                           </Select>
                           <FormMessage />

@@ -211,7 +211,7 @@ export default function RecetaDetalle() {
             <input
               ref={fileInputRef}
               type="file"
-              accept=".png,.jpg,.jpeg"
+              accept=".png"
               className="hidden"
               onChange={handleFileChange}
             />
@@ -239,7 +239,7 @@ export default function RecetaDetalle() {
               >
                 <Upload className="h-8 w-8 mx-auto mb-3 text-muted-foreground/40" />
                 <p className="text-sm font-medium text-muted-foreground">Haz clic para adjuntar la imagen</p>
-                <p className="text-xs text-muted-foreground/60 mt-1">PNG o JPG</p>
+                <p className="text-xs text-muted-foreground/60 mt-1">Solo PNG</p>
               </div>
             )}
           </CardContent>

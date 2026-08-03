@@ -151,13 +151,6 @@ export default function HospitalizacionNueva() {
                     </FormItem>
                   )} />
 
-                  <FormField control={form.control} name="jaula" render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-base font-semibold">Sitio / Jaula (Espacio)</FormLabel>
-                      <FormControl><Input className="h-12 text-base bg-muted/5 font-mono" placeholder="Ej. UCI #3, Cubículo A..." {...field} /></FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )} />
                 </div>
               </div>
 

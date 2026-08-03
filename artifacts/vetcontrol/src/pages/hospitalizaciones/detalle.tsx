@@ -175,7 +175,6 @@ export default function HospitalizacionDetalle() {
               <span className="flex items-center gap-1.5 bg-muted/50 px-3 py-1.5 rounded-lg"><Calendar className="h-4 w-4" /> Ingreso: {format(new Date(hosp.fechaIngreso), "dd/MM/yyyy")}</span>
               {hosp.fechaAlta && <span className="flex items-center gap-1.5 bg-muted/50 px-3 py-1.5 rounded-lg"><CalendarCheck className="h-4 w-4 text-emerald-600" /> Alta Final: {format(new Date(hosp.fechaAlta), "dd/MM/yyyy")}</span>}
               <span className="bg-primary/10 text-primary px-3 py-1.5 rounded-lg border border-primary/20">{diasHospitalizado} día{diasHospitalizado !== 1 ? "s" : ""}</span>
-              {hosp.jaula && <span className="font-mono bg-muted/30 px-3 py-1.5 rounded-lg border border-border/50 text-foreground">Ubicación: {hosp.jaula}</span>}
             </div>
           </div>
         </div>
@@ -397,14 +396,6 @@ export default function HospitalizacionDetalle() {
                       </FormItem>
                     )} />
 
-                    <FormField control={editForm.control} name="jaula" render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="text-base font-semibold">Jaula / Ubicación</FormLabel>
-                        <FormControl><Input className="h-12 text-base font-mono bg-muted/5" placeholder="Jaula 3, UCI…" {...field} value={field.value ?? ""} /></FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )} />
-
                     <FormField control={editForm.control} name="veterinarioResponsable" render={({ field }) => (
                       <FormItem className="md:col-span-2">
                         <FormLabel className="text-base font-semibold">Veterinario responsable</FormLabel>
@@ -538,7 +529,7 @@ function EstudiosTab({ hospitalizacionId }: { hospitalizacionId: number }) {
           </Button>
         </div>
 
-        <input ref={fileInputRef} type="file" accept=".pdf,.png,.jpg,.jpeg" multiple className="hidden" onChange={handleFiles} />
+        <input ref={fileInputRef} type="file" accept=".pdf,.png" multiple className="hidden" onChange={handleFiles} />
 
         {isLoading ? (
           <div className="py-8 flex justify-center"><div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" /></div>
@@ -549,7 +540,7 @@ function EstudiosTab({ hospitalizacionId }: { hospitalizacionId: number }) {
           >
             <Upload className="h-8 w-8 mx-auto mb-3 text-muted-foreground/40" />
             <p className="text-sm font-medium text-muted-foreground">Haz clic para adjuntar estudios</p>
-            <p className="text-xs text-muted-foreground/60 mt-1">PDF, PNG o JPG · Puedes subir varios a la vez</p>
+            <p className="text-xs text-muted-foreground/60 mt-1">PDF o PNG · Puedes subir varios a la vez</p>
           </div>
         ) : (
           <div className="space-y-3">

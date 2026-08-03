@@ -28,8 +28,8 @@ router.get("/clientes", async (req, res): Promise<void> => {
       apellidos: clientesTable.apellidos,
       telefono: clientesTable.telefono,
       email: clientesTable.email,
-      totalPacientes: sql<number>`(SELECT COUNT(*) FROM pacientes WHERE cliente_id = ${clientesTable.id})`,
-      saldo: sql<number>`COALESCE((SELECT SUM(CASE WHEN tipo='Pago' THEN -importe::numeric ELSE importe::numeric END) FROM movimientos WHERE cliente_id = ${clientesTable.id}), 0)`,
+      totalPacientes: sql<number>`(SELECT COUNT(*) FROM pacientes WHERE cliente_id = clientes.id)`,
+      saldo: sql<number>`COALESCE((SELECT SUM(CASE WHEN tipo='Pago' THEN -importe::numeric ELSE importe::numeric END) FROM movimientos WHERE cliente_id = clientes.id), 0)`,
     })
     .from(clientesTable)
     .$dynamic();
