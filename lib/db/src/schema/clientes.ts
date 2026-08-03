@@ -15,6 +15,7 @@ export const clientesTable = pgTable("clientes", {
   hojaConceptos: text("hoja_conceptos"),
   adeudoMonto: numeric("adeudo_monto", { precision: 12, scale: 2 }),
   adeudoLiquidado: boolean("adeudo_liquidado").notNull().default(false),
+  adeudoLiquidadoEn: timestamp("adeudo_liquidado_en", { withTimezone: true }),
   creadoEn: timestamp("creado_en", { withTimezone: true }).notNull().defaultNow(),
 });
 

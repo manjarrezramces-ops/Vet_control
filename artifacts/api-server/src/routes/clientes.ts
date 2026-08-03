@@ -117,7 +117,7 @@ router.get("/clientes/:clienteId", async (req, res): Promise<void> => {
     .orderBy(sql`${movimientosTable.fecha} DESC, ${movimientosTable.creadoEn} DESC`);
 
   const payload = {
-    cliente: { ...cliente, creadoEn: cliente.creadoEn.toISOString(), adeudoMonto: cliente.adeudoMonto != null ? Number(cliente.adeudoMonto) : null },
+    cliente: { ...cliente, creadoEn: cliente.creadoEn.toISOString(), adeudoMonto: cliente.adeudoMonto != null ? Number(cliente.adeudoMonto) : null, adeudoLiquidadoEn: cliente.adeudoLiquidadoEn?.toISOString() ?? null },
     saldo: parseFloat(saldoRow.saldo as string),
     pacientes: pacientes.map((p) => ({
       ...p,
@@ -142,11 +142,19 @@ router.patch("/clientes/:clienteId/adeudo", async (req, res): Promise<void> => {
   const { adeudoMonto, adeudoLiquidado } = req.body as { adeudoMonto: number | null; adeudoLiquidado: boolean };
   const [updated] = await db
     .update(clientesTable)
-    .set({ adeudoMonto: adeudoMonto != null ? String(adeudoMonto) : null, adeudoLiquidado: adeudoLiquidado ?? false })
+    .set({
+      adeudoMonto: adeudoMonto != null ? String(adeudoMonto) : null,
+      adeudoLiquidado: adeudoLiquidado ?? false,
+      adeudoLiquidadoEn: adeudoLiquidado ? new Date() : null,
+    })
     .where(eq(clientesTable.id, clienteId))
     .returning();
   if (!updated) { res.status(404).json({ error: "Cliente no encontrado" }); return; }
-  res.json({ adeudoMonto: updated.adeudoMonto != null ? Number(updated.adeudoMonto) : null, adeudoLiquidado: updated.adeudoLiquidado });
+  res.json({
+    adeudoMonto: updated.adeudoMonto != null ? Number(updated.adeudoMonto) : null,
+    adeudoLiquidado: updated.adeudoLiquidado,
+    adeudoLiquidadoEn: updated.adeudoLiquidadoEn?.toISOString() ?? null,
+  });
 });
 
 // PATCH /clientes/:clienteId/hoja-conceptos

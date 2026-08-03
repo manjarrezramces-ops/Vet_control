@@ -388,6 +388,11 @@ export default function ClienteDetalle() {
                       >
                         {liquidado ? "✓ Liquidada" : tieneAdeudo ? "Pendiente de pago" : "Sin adeudo registrado"}
                       </button>
+                      {liquidado && cliente.adeudoLiquidadoEn && (
+                        <p className="text-xs text-emerald-700 font-medium mt-1">
+                          {format(new Date(cliente.adeudoLiquidadoEn), "dd/MM/yyyy 'a las' HH:mm")}
+                        </p>
+                      )}
                     </>
                   )}
                 </CardContent>
