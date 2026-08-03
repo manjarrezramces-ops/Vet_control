@@ -20,6 +20,7 @@ import { useQueryClient } from "@tanstack/react-query";
 const formSchema = z.object({
   clienteId: z.coerce.number().min(1, "Debe seleccionar un propietario"),
   nombre: z.string().min(1, "El nombre es obligatorio"),
+  apellido: z.string().optional(),
   especie: z.string().min(1, "Especie requerida"),
   raza: z.string().optional(),
   sexo: z.string().optional(),
@@ -58,6 +59,7 @@ export default function PacienteEditar() {
     defaultValues: {
       clienteId: 0,
       nombre: "",
+      apellido: "",
       especie: "Perro",
       raza: "",
       sexo: "No especificado",
@@ -83,6 +85,7 @@ export default function PacienteEditar() {
       form.reset({
         clienteId: p.clienteId,
         nombre: p.nombre,
+        apellido: p.apellido || "",
         especie: p.especie,
         raza: p.raza || "",
         sexo: p.sexo || "No especificado",
@@ -160,6 +163,20 @@ export default function PacienteEditar() {
                         <FormLabel className="text-base font-semibold">Nombre de la mascota <span className="text-destructive">*</span></FormLabel>
                         <FormControl>
                           <Input className="h-12 text-base" placeholder="Ej. Firulais" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="apellido"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-base font-semibold">Apellido</FormLabel>
+                        <FormControl>
+                          <Input className="h-12 text-base" placeholder="Ej. García" {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>

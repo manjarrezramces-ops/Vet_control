@@ -7,3 +7,4 @@ export * from "./movimientos";
 export * from "./hospitalizaciones";
 export * from "./hospitalizacion_archivos";
 export * from "./procedimientos";
+export * from "./cuentas_cliente";

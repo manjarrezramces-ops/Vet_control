@@ -266,6 +266,7 @@ export const GetPacientesQueryParams = zod.object({
 export const GetPacientesResponseItem = zod.object({
   "id": zod.number(),
   "nombre": zod.string(),
+  "apellido": zod.string().nullish(),
   "especie": zod.string(),
   "raza": zod.string().nullish(),
   "propietario": zod.string(),
@@ -287,6 +288,7 @@ export const GetPacientesResponse = zod.array(GetPacientesResponseItem)
 export const CreatePacienteBody = zod.object({
   "clienteId": zod.number(),
   "nombre": zod.string().min(1),
+  "apellido": zod.string().optional(),
   "especie": zod.string().min(1),
   "raza": zod.string().optional(),
   "sexo": zod.string().optional(),
@@ -306,6 +308,7 @@ export const CreatePacienteResponse = zod.object({
   "id": zod.number(),
   "clienteId": zod.number(),
   "nombre": zod.string(),
+  "apellido": zod.string().nullish(),
   "especie": zod.string(),
   "raza": zod.string().nullish(),
   "sexo": zod.string().nullish(),
@@ -335,6 +338,7 @@ export const GetPacienteResponse = zod.object({
   "id": zod.number(),
   "clienteId": zod.number(),
   "nombre": zod.string(),
+  "apellido": zod.string().nullish(),
   "especie": zod.string(),
   "raza": zod.string().nullish(),
   "sexo": zod.string().nullish(),
@@ -432,6 +436,7 @@ export const UpdatePacienteParams = zod.object({
 export const UpdatePacienteBody = zod.object({
   "clienteId": zod.number(),
   "nombre": zod.string().min(1),
+  "apellido": zod.string().optional(),
   "especie": zod.string().min(1),
   "raza": zod.string().optional(),
   "sexo": zod.string().optional(),
@@ -451,6 +456,7 @@ export const UpdatePacienteResponse = zod.object({
   "id": zod.number(),
   "clienteId": zod.number(),
   "nombre": zod.string(),
+  "apellido": zod.string().nullish(),
   "especie": zod.string(),
   "raza": zod.string().nullish(),
   "sexo": zod.string().nullish(),

@@ -53,7 +53,7 @@ export default function ClientesList() {
                   <th className="h-14 px-6 text-left align-middle text-xs font-semibold text-muted-foreground uppercase tracking-wider">Nombre del Cliente</th>
                   <th className="h-14 px-6 text-left align-middle text-xs font-semibold text-muted-foreground uppercase tracking-wider">Contacto</th>
                   <th className="h-14 px-6 text-center align-middle text-xs font-semibold text-muted-foreground uppercase tracking-wider">Mascotas</th>
-                  <th className="h-14 px-6 text-right align-middle text-xs font-semibold text-muted-foreground uppercase tracking-wider">Saldo</th>
+                  <th className="h-14 px-6 text-right align-middle text-xs font-semibold text-muted-foreground uppercase tracking-wider">Saldo pendiente</th>
                   <th className="h-14 px-6 text-right align-middle font-medium text-muted-foreground"></th>
                 </tr>
               </thead>

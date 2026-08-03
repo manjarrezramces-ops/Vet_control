@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { db, clientesTable, pacientesTable, movimientosTable } from "@workspace/db";
-import { eq, ilike, or, sql, count } from "drizzle-orm";
+import { db, clientesTable, pacientesTable, movimientosTable, cuentasClienteTable } from "@workspace/db";
+import { eq, ilike, or, sql, count, desc } from "drizzle-orm";
 import {
   GetClientesQueryParams,
   GetClientesResponse,
@@ -193,6 +193,59 @@ router.delete("/clientes/:clienteId", async (req, res): Promise<void> => {
   const [deleted] = await db.delete(clientesTable).where(eq(clientesTable.id, clienteId)).returning();
   if (!deleted) { res.status(404).json({ error: "Cliente no encontrado" }); return; }
 
+  res.status(204).send();
+});
+
+// GET /clientes/:clienteId/cuentas
+router.get("/clientes/:clienteId/cuentas", async (req, res): Promise<void> => {
+  const clienteId = parseInt(Array.isArray(req.params.clienteId) ? req.params.clienteId[0] : req.params.clienteId, 10);
+  if (isNaN(clienteId)) { res.status(404).json({ error: "Not found" }); return; }
+  const cuentas = await db.select().from(cuentasClienteTable).where(eq(cuentasClienteTable.clienteId, clienteId)).orderBy(desc(cuentasClienteTable.fecha), desc(cuentasClienteTable.creadoEn));
+  res.json(cuentas.map(c => ({ ...c, monto: Number(c.monto), montoPagado: c.montoPagado != null ? Number(c.montoPagado) : null, liquidadoEn: c.liquidadoEn?.toISOString() ?? null, creadoEn: c.creadoEn.toISOString() })));
+});
+
+// POST /clientes/:clienteId/cuentas
+router.post("/clientes/:clienteId/cuentas", async (req, res): Promise<void> => {
+  const clienteId = parseInt(Array.isArray(req.params.clienteId) ? req.params.clienteId[0] : req.params.clienteId, 10);
+  if (isNaN(clienteId)) { res.status(404).json({ error: "Not found" }); return; }
+  const { fecha, monto, notas } = req.body as { fecha: string; monto: number; notas?: string };
+  if (!fecha || monto == null) { res.status(400).json({ error: "fecha y monto son requeridos" }); return; }
+  const [cuenta] = await db.insert(cuentasClienteTable).values({ clienteId, fecha, monto: String(monto), notas: notas ?? null }).returning();
+  res.status(201).json({ ...cuenta, monto: Number(cuenta.monto), liquidadoEn: null, creadoEn: cuenta.creadoEn.toISOString() });
+});
+
+// PATCH /cuentas/:cuentaId/liquidar
+router.patch("/cuentas/:cuentaId/liquidar", async (req, res): Promise<void> => {
+  const cuentaId = parseInt(Array.isArray(req.params.cuentaId) ? req.params.cuentaId[0] : req.params.cuentaId, 10);
+  if (isNaN(cuentaId)) { res.status(404).json({ error: "Not found" }); return; }
+  const { montoPagado, tipoPago } = req.body as { montoPagado: number; tipoPago: "total" | "parcial" | null };
+  // liquidado = true only when tipo is total (full payment)
+  const liquidado = tipoPago === "total";
+  const [updated] = await db.update(cuentasClienteTable).set({
+    liquidado,
+    liquidadoEn: liquidado ? new Date() : null,
+    montoPagado: montoPagado != null ? String(montoPagado) : null,
+    tipoPago,
+  }).where(eq(cuentasClienteTable.id, cuentaId)).returning();
+  if (!updated) { res.status(404).json({ error: "Cuenta no encontrada" }); return; }
+  res.json({ ...updated, monto: Number(updated.monto), montoPagado: updated.montoPagado != null ? Number(updated.montoPagado) : null, liquidadoEn: updated.liquidadoEn?.toISOString() ?? null, creadoEn: updated.creadoEn.toISOString() });
+});
+
+// PATCH /cuentas/:cuentaId/hoja
+router.patch("/cuentas/:cuentaId/hoja", async (req, res): Promise<void> => {
+  const cuentaId = parseInt(Array.isArray(req.params.cuentaId) ? req.params.cuentaId[0] : req.params.cuentaId, 10);
+  if (isNaN(cuentaId)) { res.status(404).json({ error: "Not found" }); return; }
+  const { hojaConceptos } = req.body as { hojaConceptos: string | null };
+  const [updated] = await db.update(cuentasClienteTable).set({ hojaConceptos: hojaConceptos ?? null }).where(eq(cuentasClienteTable.id, cuentaId)).returning();
+  if (!updated) { res.status(404).json({ error: "Cuenta no encontrada" }); return; }
+  res.json({ ...updated, monto: Number(updated.monto), liquidadoEn: updated.liquidadoEn?.toISOString() ?? null, creadoEn: updated.creadoEn.toISOString() });
+});
+
+// DELETE /cuentas/:cuentaId
+router.delete("/cuentas/:cuentaId", async (req, res): Promise<void> => {
+  const cuentaId = parseInt(Array.isArray(req.params.cuentaId) ? req.params.cuentaId[0] : req.params.cuentaId, 10);
+  if (isNaN(cuentaId)) { res.status(404).json({ error: "Not found" }); return; }
+  await db.delete(cuentasClienteTable).where(eq(cuentasClienteTable.id, cuentaId));
   res.status(204).send();
 });
 

@@ -98,7 +98,7 @@ export default function PacienteDetalle() {
               {getSpeciesIcon(paciente.especie)}
             </div>
             <div>
-              <h1 className="text-4xl font-bold tracking-tight text-foreground">{paciente.nombre}</h1>
+              <h1 className="text-4xl font-bold tracking-tight text-foreground">{paciente.nombre}{paciente.apellido ? ` ${paciente.apellido}` : ""}</h1>
               <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground mt-2 font-medium">
                 <Link href={`/clientes/${propietarioId}`} className="hover:text-primary transition-colors flex items-center gap-1.5 bg-muted/50 px-2 py-1 rounded-md">
                   <User className="h-4 w-4" /> {propietario}

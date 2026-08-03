@@ -7,6 +7,7 @@ export const pacientesTable = pgTable("pacientes", {
   id: serial("id").primaryKey(),
   clienteId: integer("cliente_id").notNull().references(() => clientesTable.id, { onDelete: "cascade" }),
   nombre: text("nombre").notNull(),
+  apellido: text("apellido"),
   especie: text("especie").notNull(),
   raza: text("raza"),
   sexo: text("sexo"),

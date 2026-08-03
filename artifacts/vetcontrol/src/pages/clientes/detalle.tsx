@@ -1,8 +1,8 @@
 import { useParams, Link, useLocation } from "wouter";
 import { useGetCliente, getGetClienteQueryKey, useDeleteCliente } from "@workspace/api-client-react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
-import { useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -12,22 +12,272 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import {
   ArrowLeft, Plus, Edit, Trash2, MapPin, Phone, Mail, FileText, User, Cat, Calendar,
-  Upload, X, ImageIcon, Loader2
+  Upload, X, ImageIcon, Loader2, CheckCircle2, Clock, ChevronDown, ChevronUp,
 } from "lucide-react";
-
-const BASE = () => (import.meta.env.BASE_URL as string).replace(/\/$/, "");
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 
+const BASE = () => (import.meta.env.BASE_URL as string).replace(/\/$/, "");
+
+type Cuenta = {
+  id: number;
+  clienteId: number;
+  fecha: string;
+  monto: number;
+  liquidado: boolean;
+  liquidadoEn: string | null;
+  montoPagado: number | null;
+  tipoPago: "total" | "parcial" | null;
+  hojaConceptos: string | null;
+  notas: string | null;
+  creadoEn: string;
+};
+
+/* ── small sub-component for one cuenta row ── */
+function CuentaRow({ cuenta, clienteId }: { cuenta: Cuenta; clienteId: number }) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [expanded, setExpanded] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [showPago, setShowPago] = useState(false);
+  const [pagoMonto, setPagoMonto] = useState("");
+  const [savingPago, setSavingPago] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const QK = ["cuentas", clienteId];
+
+  const registrarPago = async (tipoPago: "total" | "parcial") => {
+    const montoPagado = tipoPago === "total" ? cuenta.monto : parseFloat(pagoMonto.replace(/,/g, ""));
+    if (isNaN(montoPagado) || montoPagado <= 0) {
+      toast({ variant: "destructive", title: "Ingresa un monto válido" });
+      return;
+    }
+    setSavingPago(true);
+    try {
+      const res = await fetch(`${BASE()}/api/cuentas/${cuenta.id}/liquidar`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ montoPagado, tipoPago }),
+      });
+      if (!res.ok) throw new Error();
+      queryClient.invalidateQueries({ queryKey: QK });
+      setShowPago(false);
+      setPagoMonto("");
+      toast({ title: tipoPago === "total" ? "✓ Cuenta liquidada en su totalidad" : "Pago parcial registrado" });
+    } catch { toast({ variant: "destructive", title: "Error al registrar el pago" }); }
+    finally { setSavingPago(false); }
+  };
+
+  const deshacerPago = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`${BASE()}/api/cuentas/${cuenta.id}/liquidar`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ montoPagado: 0, tipoPago: null }),
+      });
+      if (!res.ok) throw new Error();
+    },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: QK }); toast({ title: "Pago deshecho" }); },
+    onError: () => toast({ variant: "destructive", title: "Error al deshacer" }),
+  });
+
+  const deleteCuenta = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`${BASE()}/api/cuentas/${cuenta.id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error();
+    },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: QK }); toast({ title: "Cuenta eliminada" }); },
+    onError: () => toast({ variant: "destructive", title: "Error al eliminar" }),
+  });
+
+  const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const urlRes = await fetch(`${BASE()}/api/storage/uploads/request-url`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: file.name, size: file.size, contentType: file.type }),
+      });
+      const { uploadURL, objectPath } = await urlRes.json();
+      await fetch(uploadURL, { method: "PUT", headers: { "Content-Type": file.type }, body: file });
+      await fetch(`${BASE()}/api/cuentas/${cuenta.id}/hoja`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ hojaConceptos: objectPath }),
+      });
+      queryClient.invalidateQueries({ queryKey: QK });
+      toast({ title: "Hoja adjuntada" });
+    } catch { toast({ variant: "destructive", title: "Error al subir" }); }
+    finally { setUploading(false); if (fileRef.current) fileRef.current.value = ""; }
+  };
+
+  const removeHoja = async () => {
+    await fetch(`${BASE()}/api/cuentas/${cuenta.id}/hoja`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ hojaConceptos: null }),
+    });
+    queryClient.invalidateQueries({ queryKey: QK });
+  };
+
+  const fmt = (n: number) => new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(n);
+
+  const saldoRestante = Math.max(0, cuenta.monto - (cuenta.montoPagado ?? 0));
+  const tienePago = cuenta.montoPagado != null && cuenta.montoPagado > 0;
+  const esParcial = tienePago && !cuenta.liquidado;
+  const borderColor = cuenta.liquidado ? "border-emerald-200 bg-emerald-50/40" : esParcial ? "border-amber-200 bg-amber-50/30" : "border-border bg-card";
+
+  return (
+    <div className={`rounded-xl border ${borderColor} overflow-hidden`}>
+      {/* Header row */}
+      <div className="flex items-center gap-3 p-4">
+        <div className="shrink-0">
+          {cuenta.liquidado
+            ? <CheckCircle2 className="h-6 w-6 text-emerald-500" />
+            : esParcial
+            ? <Clock className="h-6 w-6 text-amber-500" />
+            : <Clock className="h-6 w-6 text-destructive" />}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-baseline gap-2 flex-wrap">
+            <span className={`text-xl font-black tracking-tight ${cuenta.liquidado ? "text-emerald-700" : esParcial ? "text-amber-700" : "text-destructive"}`}>
+              {fmt(cuenta.monto)}
+            </span>
+            <span className="text-xs text-muted-foreground font-medium">
+              {format(new Date(cuenta.fecha + "T12:00:00"), "dd/MM/yyyy")}
+            </span>
+          </div>
+          {cuenta.liquidado && cuenta.liquidadoEn && (
+            <p className="text-xs text-emerald-600 font-medium mt-0.5">
+              ✓ Liquidada el {format(new Date(cuenta.liquidadoEn), "dd/MM/yyyy 'a las' HH:mm")}
+            </p>
+          )}
+          {esParcial && (
+            <p className="text-xs text-amber-700 font-medium mt-0.5">
+              Pagó {fmt(cuenta.montoPagado!)} · Resta {fmt(saldoRestante)}
+            </p>
+          )}
+          {!tienePago && !cuenta.liquidado && (
+            <p className="text-xs text-destructive font-medium mt-0.5">Pendiente de pago</p>
+          )}
+        </div>
+        <div className="flex items-center gap-1 shrink-0">
+          <button
+            onClick={() => setExpanded(v => !v)}
+            className="p-1.5 rounded-lg hover:bg-muted/50 text-muted-foreground transition-colors"
+          >
+            {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+          </button>
+        </div>
+      </div>
+
+      {/* Expanded panel */}
+      {expanded && (
+        <div className="border-t px-4 pb-4 pt-3 space-y-4 bg-muted/10">
+          {/* Hoja de conceptos */}
+          <div>
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Hoja de conceptos</p>
+            <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/jpg" className="hidden" onChange={handleFile} />
+            {cuenta.hojaConceptos ? (
+              <div className="space-y-2">
+                <div className="rounded-lg overflow-hidden border">
+                  <img src={`${BASE()}/api/storage${cuenta.hojaConceptos}`} alt="Hoja" className="w-full object-contain max-h-64" />
+                </div>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="outline" className="flex-1" onClick={() => fileRef.current?.click()} disabled={uploading}>
+                    {uploading ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Upload className="h-3 w-3 mr-1" />} Reemplazar
+                  </Button>
+                  <Button size="sm" variant="outline" className="text-destructive hover:bg-destructive/10" onClick={removeHoja}>
+                    <X className="h-3 w-3" />
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={() => fileRef.current?.click()}
+                disabled={uploading}
+                className="w-full border-2 border-dashed border-border rounded-lg p-6 flex flex-col items-center gap-2 hover:border-primary/40 hover:bg-muted/20 transition-colors disabled:opacity-50"
+              >
+                {uploading ? <Loader2 className="h-7 w-7 text-muted-foreground animate-spin" /> : <ImageIcon className="h-7 w-7 text-muted-foreground/40" />}
+                <span className="text-xs text-muted-foreground">{uploading ? "Subiendo..." : "Adjuntar PNG / JPG"}</span>
+              </button>
+            )}
+          </div>
+
+          {/* Notas */}
+          {cuenta.notas && (
+            <p className="text-sm text-muted-foreground bg-muted/30 rounded-lg px-3 py-2">{cuenta.notas}</p>
+          )}
+
+          {/* Payment actions */}
+          <div className="space-y-2 pt-1">
+            {/* Show payment form */}
+            {showPago && (
+              <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 space-y-3">
+                <p className="text-xs font-bold text-primary uppercase tracking-wider">¿Cuánto pagó?</p>
+                {/* Pago total */}
+                <Button size="sm" className="w-full bg-emerald-600 hover:bg-emerald-700" onClick={() => registrarPago("total")} disabled={savingPago}>
+                  {savingPago ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <CheckCircle2 className="h-3 w-3 mr-1" />}
+                  Pago total — {fmt(cuenta.monto)}
+                </Button>
+                {/* Pago parcial */}
+                <div className="flex gap-2">
+                  <input
+                    type="number" step="0.01" min="0" placeholder="Monto parcial..."
+                    value={pagoMonto} onChange={e => setPagoMonto(e.target.value)}
+                    className="flex-1 h-9 text-sm font-mono border border-border rounded-lg px-3 focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  />
+                  <Button size="sm" variant="outline" className="border-amber-400 text-amber-700 hover:bg-amber-50 shrink-0" onClick={() => registrarPago("parcial")} disabled={savingPago}>
+                    Pago parcial
+                  </Button>
+                </div>
+                <Button size="sm" variant="ghost" className="w-full text-muted-foreground text-xs" onClick={() => { setShowPago(false); setPagoMonto(""); }}>
+                  Cancelar
+                </Button>
+              </div>
+            )}
+
+            <div className="flex gap-2">
+              {!showPago && (
+                tienePago ? (
+                  <Button size="sm" variant="outline" className="flex-1 text-muted-foreground text-xs" onClick={() => deshacerPago.mutate()} disabled={deshacerPago.isPending}>
+                    {deshacerPago.isPending && <Loader2 className="h-3 w-3 animate-spin mr-1" />}
+                    Deshacer pago
+                  </Button>
+                ) : (
+                  <Button size="sm" variant="outline" className="flex-1 border-emerald-400 text-emerald-700 hover:bg-emerald-50 font-semibold" onClick={() => setShowPago(true)}>
+                    Registrar pago
+                  </Button>
+                )
+              )}
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button size="sm" variant="outline" className="text-destructive hover:bg-destructive/10">
+                    <Trash2 className="h-3 w-3" />
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>¿Eliminar esta cuenta?</AlertDialogTitle>
+                    <AlertDialogDescription>Esta acción no se puede deshacer.</AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                    <AlertDialogAction onClick={() => deleteCuenta.mutate()} className="bg-destructive text-white hover:bg-destructive/90">
+                      Eliminar
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── main page ── */
 export default function ClienteDetalle() {
   const params = useParams();
   const id = Number(params.id);
@@ -36,17 +286,58 @@ export default function ClienteDetalle() {
   const queryClient = useQueryClient();
 
   const { data, isLoading, isError } = useGetCliente(id, {
-    query: {
-      enabled: !!id,
-      queryKey: getGetClienteQueryKey(id),
+    query: { enabled: !!id, queryKey: getGetClienteQueryKey(id) },
+  });
+
+  const { data: cuentas = [] } = useQuery<Cuenta[]>({
+    queryKey: ["cuentas", id],
+    queryFn: async () => {
+      const res = await fetch(`${BASE()}/api/clientes/${id}/cuentas`);
+      if (!res.ok) throw new Error();
+      return res.json();
     },
+    enabled: !!id,
   });
 
   const deleteCliente = useDeleteCliente();
-  const [uploading, setUploading] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [editingAdeudo, setEditingAdeudo] = useState(false);
-  const [adeudoInput, setAdeudoInput] = useState("");
+
+  // nueva cuenta
+  const [showNueva, setShowNueva] = useState(false);
+  const [nuevaFecha, setNuevaFecha] = useState(format(new Date(), "yyyy-MM-dd"));
+  const [nuevaMonto, setNuevaMonto] = useState("");
+  const [nuevaNotas, setNuevaNotas] = useState("");
+  const [savingNueva, setSavingNueva] = useState(false);
+
+  const handleCrearCuenta = async () => {
+    const monto = parseFloat(nuevaMonto.replace(/,/g, ""));
+    if (!nuevaFecha || isNaN(monto) || monto <= 0) {
+      toast({ variant: "destructive", title: "Fecha y monto son requeridos" });
+      return;
+    }
+    setSavingNueva(true);
+    try {
+      const res = await fetch(`${BASE()}/api/clientes/${id}/cuentas`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fecha: nuevaFecha, monto, notas: nuevaNotas || undefined }),
+      });
+      if (!res.ok) throw new Error();
+      queryClient.invalidateQueries({ queryKey: ["cuentas", id] });
+      setShowNueva(false);
+      setNuevaMonto(""); setNuevaNotas("");
+      toast({ title: "Cuenta registrada" });
+    } catch { toast({ variant: "destructive", title: "Error al registrar" }); }
+    finally { setSavingNueva(false); }
+  };
+
+  const handleDelete = () => {
+    deleteCliente.mutate(
+      { clienteId: id },
+      {
+        onSuccess: () => { toast({ title: "Cliente eliminado" }); setLocation("/clientes"); },
+        onError: () => toast({ variant: "destructive", title: "Error", description: "No se pudo eliminar el cliente." }),
+      }
+    );
+  };
 
   if (isLoading) {
     return <div className="space-y-8">
@@ -62,97 +353,8 @@ export default function ClienteDetalle() {
     return <div className="text-destructive font-medium text-lg">Error al cargar el cliente.</div>;
   }
 
-  const { cliente, saldo, pacientes } = data;
-
-  const formatMoney = (amount: number) =>
-    new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(amount);
-
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setUploading(true);
-    try {
-      const urlRes = await fetch(`${BASE()}/api/storage/uploads/request-url`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: file.name, size: file.size, contentType: file.type }),
-      });
-      const { uploadURL, objectPath } = await urlRes.json();
-      await fetch(uploadURL, { method: "PUT", headers: { "Content-Type": file.type }, body: file });
-      await fetch(`${BASE()}/api/clientes/${id}/hoja-conceptos`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ hojaConceptos: objectPath }),
-      });
-      queryClient.invalidateQueries({ queryKey: getGetClienteQueryKey(id) });
-      toast({ title: "Hoja de conceptos actualizada" });
-    } catch {
-      toast({ variant: "destructive", title: "Error al subir el archivo" });
-    } finally {
-      setUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
-    }
-  };
-
-  const handleSaveAdeudo = async (liquidado: boolean) => {
-    const monto = parseFloat(adeudoInput.replace(/,/g, ""));
-    try {
-      await fetch(`${BASE()}/api/clientes/${id}/adeudo`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ adeudoMonto: isNaN(monto) ? null : monto, adeudoLiquidado: liquidado }),
-      });
-      queryClient.invalidateQueries({ queryKey: getGetClienteQueryKey(id) });
-      setEditingAdeudo(false);
-      toast({ title: "Adeudo actualizado" });
-    } catch {
-      toast({ variant: "destructive", title: "Error al guardar el adeudo" });
-    }
-  };
-
-  const handleToggleLiquidado = async () => {
-    const current = cliente.adeudoLiquidado ?? false;
-    try {
-      await fetch(`${BASE()}/api/clientes/${id}/adeudo`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ adeudoMonto: cliente.adeudoMonto ?? null, adeudoLiquidado: !current }),
-      });
-      queryClient.invalidateQueries({ queryKey: getGetClienteQueryKey(id) });
-      toast({ title: !current ? "Marcada como liquidada" : "Marcada como pendiente" });
-    } catch {
-      toast({ variant: "destructive", title: "Error al actualizar" });
-    }
-  };
-
-  const handleRemoveHoja = async () => {
-    try {
-      await fetch(`${BASE()}/api/clientes/${id}/hoja-conceptos`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ hojaConceptos: null }),
-      });
-      queryClient.invalidateQueries({ queryKey: getGetClienteQueryKey(id) });
-      toast({ title: "Archivo eliminado" });
-    } catch {
-      toast({ variant: "destructive", title: "Error al eliminar" });
-    }
-  };
-
-  const handleDelete = () => {
-    deleteCliente.mutate(
-      { clienteId: id },
-      {
-        onSuccess: () => {
-          toast({ title: "Cliente eliminado", description: "El cliente ha sido eliminado exitosamente." });
-          setLocation("/clientes");
-        },
-        onError: () => {
-          toast({ variant: "destructive", title: "Error", description: "No se pudo eliminar el cliente." });
-        }
-      }
-    );
-  };
+  const { cliente, pacientes } = data;
+  const formatMoney = (n: number) => new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(n);
 
   return (
     <div className="space-y-8">
@@ -165,9 +367,7 @@ export default function ClienteDetalle() {
             </Button>
           </Link>
           <div>
-            <h1 className="text-4xl font-bold tracking-tight text-foreground flex items-center gap-3">
-              {cliente.nombre} {cliente.apellidos}
-            </h1>
+            <h1 className="text-4xl font-bold tracking-tight text-foreground">{cliente.nombre} {cliente.apellidos}</h1>
             <div className="flex items-center gap-2 text-muted-foreground mt-2 text-sm font-medium">
               <Calendar className="h-4 w-4" />
               Registrado el {format(new Date(cliente.creadoEn), "dd/MM/yyyy")}
@@ -282,7 +482,6 @@ export default function ClienteDetalle() {
                 <div className="text-center py-12 text-muted-foreground border-2 border-dashed rounded-xl bg-muted/10">
                   <Cat className="h-12 w-12 mx-auto mb-4 opacity-20" />
                   <p className="text-lg font-medium">No hay pacientes registrados</p>
-                  <p className="text-sm">Agrega la primera mascota de este cliente.</p>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -308,163 +507,79 @@ export default function ClienteDetalle() {
           </Card>
         </div>
 
-        {/* Adeudo + Hoja de conceptos */}
-        <div className="space-y-6">
-
-          {/* Adeudo */}
-          {(() => {
-            const monto = cliente.adeudoMonto ?? null;
-            const liquidado = cliente.adeudoLiquidado ?? false;
-            const tieneAdeudo = monto !== null;
-            return (
-              <Card className={`shadow-sm border-t-4 ${liquidado ? "border-t-emerald-500" : tieneAdeudo ? "border-t-destructive" : "border-t-primary"}`}>
-                <CardHeader className="pb-3 border-b bg-muted/10 flex flex-row items-center justify-between">
-                  <CardTitle className="text-base font-bold">Adeudo</CardTitle>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 px-3 text-xs"
-                    onClick={() => {
-                      setAdeudoInput(monto != null ? String(monto) : "");
-                      setEditingAdeudo(true);
-                    }}
-                  >
-                    <Edit className="h-3 w-3 mr-1" /> Editar
-                  </Button>
-                </CardHeader>
-                <CardContent className="p-6 text-center space-y-4">
-                  {editingAdeudo ? (
-                    <div className="space-y-4">
-                      <div>
-                        <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block mb-2">Monto del adeudo</label>
-                        <div className="flex items-center gap-2">
-                          <span className="text-lg font-bold text-muted-foreground">$</span>
-                          <input
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            placeholder="0.00"
-                            value={adeudoInput}
-                            onChange={(e) => setAdeudoInput(e.target.value)}
-                            className="flex-1 h-12 text-xl font-bold font-mono border border-border rounded-lg px-3 focus:outline-none focus:ring-2 focus:ring-primary/40 text-center"
-                            autoFocus
-                          />
-                        </div>
-                      </div>
-                      <div className="flex gap-2">
-                        <Button size="sm" className="flex-1 bg-destructive hover:bg-destructive/90" onClick={() => handleSaveAdeudo(false)}>
-                          Guardar — Pendiente
-                        </Button>
-                        <Button size="sm" className="flex-1 bg-emerald-600 hover:bg-emerald-700" onClick={() => handleSaveAdeudo(true)}>
-                          Guardar — Liquidada
-                        </Button>
-                      </div>
-                      <Button variant="ghost" size="sm" className="w-full text-muted-foreground" onClick={() => setEditingAdeudo(false)}>
-                        Cancelar
-                      </Button>
-                    </div>
-                  ) : (
-                    <>
-                      <div className="text-xs text-muted-foreground font-medium">
-                        {format(new Date(), "dd 'de' MMMM 'de' yyyy")}
-                      </div>
-                      {tieneAdeudo ? (
-                        <div className={`text-5xl font-black tracking-tight ${liquidado ? "text-emerald-600" : "text-destructive"}`}>
-                          {formatMoney(Number(monto))}
-                        </div>
-                      ) : (
-                        <div className="text-2xl font-semibold text-muted-foreground/50 py-2">—</div>
-                      )}
-                      <button
-                        onClick={tieneAdeudo ? handleToggleLiquidado : undefined}
-                        disabled={!tieneAdeudo}
-                        className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider transition-colors ${
-                          liquidado
-                            ? "bg-emerald-100 text-emerald-800 hover:bg-emerald-200 cursor-pointer"
-                            : tieneAdeudo
-                            ? "bg-red-100 text-red-800 hover:bg-red-200 cursor-pointer"
-                            : "bg-muted text-muted-foreground cursor-default"
-                        }`}
-                      >
-                        {liquidado ? "✓ Liquidada" : tieneAdeudo ? "Pendiente de pago" : "Sin adeudo registrado"}
-                      </button>
-                      {liquidado && cliente.adeudoLiquidadoEn && (
-                        <p className="text-xs text-emerald-700 font-medium mt-1">
-                          {format(new Date(cliente.adeudoLiquidadoEn), "dd/MM/yyyy 'a las' HH:mm")}
-                        </p>
-                      )}
-                    </>
-                  )}
-                </CardContent>
-              </Card>
-            );
-          })()}
-
-          {/* Hoja de conceptos */}
+        {/* Cuentas / Historial de pagos */}
+        <div className="space-y-4">
           <Card className="shadow-sm">
-            <CardHeader className="pb-4 border-b bg-muted/20">
+            <CardHeader className="pb-4 border-b bg-muted/20 flex flex-row items-center justify-between">
               <CardTitle className="text-base flex items-center gap-2">
-                <FileText className="h-4 w-4 text-primary" /> Hoja de conceptos
+                <FileText className="h-4 w-4 text-primary" /> Cuentas
+                {cuentas.length > 0 && (
+                  <Badge variant="secondary" className="ml-1 text-xs">{cuentas.length}</Badge>
+                )}
               </CardTitle>
+              <Button size="sm" onClick={() => setShowNueva(v => !v)}>
+                <Plus className="h-3 w-3 mr-1" /> Nueva
+              </Button>
             </CardHeader>
-            <CardContent className="p-6">
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/png,image/jpeg,image/jpg"
-                className="hidden"
-                onChange={handleFileChange}
-              />
-              {cliente.hojaConceptos ? (
-                <div className="space-y-4">
-                  <div className="rounded-xl overflow-hidden border border-border shadow-sm">
-                    <img
-                      src={`${BASE()}/api/storage${cliente.hojaConceptos}`}
-                      alt="Hoja de conceptos"
-                      className="w-full object-contain max-h-[500px]"
-                    />
+
+            {showNueva && (
+              <div className="border-b px-4 py-4 bg-primary/5 space-y-3">
+                <p className="text-xs font-bold text-primary uppercase tracking-wider">Registrar nueva cuenta</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-semibold text-muted-foreground block mb-1">Fecha</label>
+                    <input type="date" value={nuevaFecha} onChange={e => setNuevaFecha(e.target.value)}
+                      className="w-full h-10 text-sm border border-border rounded-lg px-3 focus:outline-none focus:ring-2 focus:ring-primary/30" />
                   </div>
-                  <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="flex-1"
-                      onClick={() => fileInputRef.current?.click()}
-                      disabled={uploading}
-                    >
-                      {uploading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Upload className="h-4 w-4 mr-2" />}
-                      Reemplazar
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="text-destructive hover:bg-destructive/10"
-                      onClick={handleRemoveHoja}
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
+                  <div>
+                    <label className="text-xs font-semibold text-muted-foreground block mb-1">Monto ($)</label>
+                    <input type="number" step="0.01" min="0" placeholder="0.00" value={nuevaMonto} onChange={e => setNuevaMonto(e.target.value)}
+                      className="w-full h-10 text-sm font-mono border border-border rounded-lg px-3 focus:outline-none focus:ring-2 focus:ring-primary/30" />
                   </div>
                 </div>
+                <div>
+                  <label className="text-xs font-semibold text-muted-foreground block mb-1">Notas <span className="font-normal">(opcional)</span></label>
+                  <input type="text" placeholder="Descripción breve..." value={nuevaNotas} onChange={e => setNuevaNotas(e.target.value)}
+                    className="w-full h-10 text-sm border border-border rounded-lg px-3 focus:outline-none focus:ring-2 focus:ring-primary/30" />
+                </div>
+                <div className="flex gap-2">
+                  <Button size="sm" className="flex-1" onClick={handleCrearCuenta} disabled={savingNueva}>
+                    {savingNueva && <Loader2 className="h-3 w-3 animate-spin mr-1" />} Registrar
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => setShowNueva(false)}>Cancelar</Button>
+                </div>
+              </div>
+            )}
+
+            <CardContent className="p-4 space-y-3">
+              {cuentas.length === 0 ? (
+                <div className="text-center py-10 text-muted-foreground border-2 border-dashed rounded-xl bg-muted/10">
+                  <FileText className="h-8 w-8 mx-auto mb-2 opacity-20" />
+                  <p className="text-sm font-medium">Sin cuentas registradas</p>
+                  <p className="text-xs mt-1">Presiona "+ Nueva" para agregar la primera.</p>
+                </div>
               ) : (
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={uploading}
-                  className="w-full border-2 border-dashed border-border rounded-xl p-10 flex flex-col items-center gap-3 hover:border-primary/50 hover:bg-muted/20 transition-colors cursor-pointer disabled:opacity-50"
-                >
-                  {uploading ? (
-                    <Loader2 className="h-10 w-10 text-muted-foreground animate-spin" />
-                  ) : (
-                    <ImageIcon className="h-10 w-10 text-muted-foreground/40" />
-                  )}
-                  <span className="text-sm font-medium text-muted-foreground">
-                    {uploading ? "Subiendo..." : "Adjuntar PNG / JPG"}
-                  </span>
-                </button>
+                cuentas.map(c => <CuentaRow key={c.id} cuenta={c} clienteId={id} />)
               )}
             </CardContent>
           </Card>
 
+          {/* resumen rápido */}
+          {cuentas.length > 0 && (() => {
+            const totalPendiente = cuentas.reduce((s, c) => s + Math.max(0, c.monto - (c.montoPagado ?? 0)), 0);
+            const cuentasPendientes = cuentas.filter(c => !c.liquidado).length;
+            return (
+              <div className={`rounded-xl p-4 text-center ${totalPendiente > 0 ? "bg-red-50 border border-red-200" : "bg-emerald-50 border border-emerald-200"}`}>
+                <p className="text-xs font-bold uppercase tracking-wider mb-1 text-muted-foreground">Saldo pendiente</p>
+                <p className={`text-3xl font-black tracking-tight ${totalPendiente > 0 ? "text-destructive" : "text-emerald-700"}`}>
+                  {formatMoney(totalPendiente)}
+                </p>
+                <p className="text-xs mt-1 text-muted-foreground">
+                  {totalPendiente === 0 ? "Al corriente ✓" : `${cuentasPendientes} cuenta${cuentasPendientes !== 1 ? "s" : ""} pendiente${cuentasPendientes !== 1 ? "s" : ""}`}
+                </p>
+              </div>
+            );
+          })()}
         </div>
       </div>
     </div>
