@@ -414,7 +414,7 @@ export default function ClienteDetalle() {
                 <div className="space-y-4">
                   <div className="rounded-xl overflow-hidden border border-border shadow-sm">
                     <img
-                      src={`${BASE()}/api/storage/files/${encodeURIComponent(cliente.hojaConceptos)}`}
+                      src={`${BASE()}/api/storage${cliente.hojaConceptos}`}
                       alt="Hoja de conceptos"
                       className="w-full object-contain max-h-[500px]"
                     />
