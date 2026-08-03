@@ -16,7 +16,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ArrowLeft, Loader2, BedDouble, AlertTriangle, ClipboardList } from "lucide-react";
 
-const ESTADOS = ["Crítico", "Grave", "En observación", "Estable", "En recuperación", "Hospitalizado"] as const;
+const ESTADOS = ["Estable", "Crítico", "Grave", "En recuperación"] as const;
 
 const formSchema = z.object({
   fechaIngreso: z.string().min(1, "La fecha de ingreso es obligatoria"),
@@ -46,7 +46,7 @@ export default function HospitalizacionNueva() {
     resolver: zodResolver(formSchema),
     defaultValues: {
       fechaIngreso: format(new Date(), "yyyy-MM-dd"),
-      estado: "Hospitalizado",
+      estado: "Estable",
       motivo: "",
       jaula: "",
       veterinarioResponsable: "",

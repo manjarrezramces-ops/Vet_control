@@ -13,6 +13,7 @@ export const recetasTable = pgTable("recetas", {
   indicacionesGenerales: text("indicaciones_generales"),
   proximaRevision: date("proxima_revision", { mode: "string" }),
   archivoImagen: text("archivo_imagen"),
+  archivoAdjuntadoEn: timestamp("archivo_adjuntado_en", { withTimezone: true }),
   creadoEn: timestamp("creado_en", { withTimezone: true }).notNull().defaultNow(),
 });
 

@@ -299,47 +299,38 @@ export default function PacienteDetalle() {
               {recetas.length === 0 ? (
                 <div className="text-center py-20 text-muted-foreground border-2 border-dashed rounded-xl bg-muted/10">
                   <FileText className="h-12 w-12 mx-auto mb-4 opacity-20" />
-                  <p className="text-lg font-medium text-foreground">No hay recetas emitidas</p>
-                  <p className="text-sm mt-1">El historial farmacológico está vacío.</p>
+                  <p className="text-lg font-medium text-foreground">Sin recetas registradas</p>
+                  <p className="text-sm mt-1">Adjunta el archivo de la primera receta.</p>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="grid gap-4">
                   {recetas.map(receta => (
-                    <Card key={receta.id} className="hover:shadow-md transition-shadow group">
-                      <CardHeader className="bg-muted/30 pb-4 border-b">
-                        <div className="flex justify-between items-start">
-                          <div>
-                            <CardTitle className="text-lg flex items-center gap-2 text-foreground">
-                              <Calendar className="w-4 h-4 text-muted-foreground" /> {format(new Date(receta.fecha), "dd/MM/yyyy")}
-                            </CardTitle>
+                    <Card key={receta.id} className="hover:shadow-md transition-shadow group overflow-hidden border-l-4 border-l-transparent hover:border-l-primary">
+                      <CardContent className="p-0 flex items-center">
+                        <div className="p-5 bg-muted/20 border-r flex flex-col justify-center min-w-[140px] shrink-0">
+                          <div className="flex items-center gap-2 font-bold text-base text-primary">
+                            <Calendar className="w-4 h-4" />
+                            {format(new Date(receta.fecha), "dd/MM/yyyy")}
                           </div>
-                          <Badge variant="secondary" className="font-medium px-2 py-1">
-                            {receta.partidas.length} Med{receta.partidas.length !== 1 ? 's' : ''}
-                          </Badge>
                         </div>
-                      </CardHeader>
-                      <CardContent className="pt-5 pb-5">
-                        <div className="space-y-3 mb-6 min-h-[80px]">
-                          {receta.partidas.slice(0, 3).map((p, i) => (
-                            <div key={i} className="text-sm flex items-start gap-2">
-                              <div className="w-1.5 h-1.5 rounded-full bg-primary mt-1.5 shrink-0" />
-                              <div className="leading-tight">
-                                <span className="font-bold text-foreground">{p.medicamento}</span>
-                                <span className="text-muted-foreground block text-xs mt-0.5">{p.dosis}</span>
-                              </div>
-                            </div>
-                          ))}
-                          {receta.partidas.length > 3 && (
-                            <div className="text-xs font-semibold text-primary uppercase tracking-wider pl-4 pt-2">
-                              + {receta.partidas.length - 3} medicamentos más
-                            </div>
+                        <div className="p-5 flex-1 flex items-center gap-3">
+                          {(receta as typeof receta & { archivoImagen?: string | null }).archivoImagen ? (
+                            <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200 border font-semibold text-xs">
+                              Archivo adjunto
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-muted-foreground text-xs font-semibold">
+                              Sin archivo
+                            </Badge>
                           )}
                         </div>
-                        <Link href={`/recetas/${receta.id}`}>
-                          <Button variant="outline" className="w-full font-medium group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
-                            Abrir y Consultar
-                          </Button>
-                        </Link>
+                        <div className="p-5 shrink-0 border-l bg-muted/5">
+                          <Link href={`/recetas/${receta.id}`}>
+                            <Button variant="outline" size="sm" className="font-medium group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
+                              Ver receta
+                            </Button>
+                          </Link>
+                        </div>
                       </CardContent>
                     </Card>
                   ))}

@@ -130,64 +130,7 @@ export default function MovimientoNuevo() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        
-        {/* Helper Panel */}
-        <div className="lg:col-span-1 space-y-6">
-          <Card className="border-dashed border-2 shadow-none bg-muted/5">
-            <CardHeader className="pb-3 border-b">
-              <CardTitle className="text-base font-bold flex items-center gap-2">
-                <Banknote className="h-4 w-4 text-muted-foreground" /> Atajos de Facturación
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="pt-5 space-y-5">
-              <div className="space-y-3">
-                <div className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Servicio Médico Activo</div>
-                <div className={`p-4 rounded-xl border flex flex-col gap-3 ${tarifa.turno === "Diurno" ? "bg-amber-50/50 border-amber-200" : "bg-indigo-50/50 border-indigo-200"}`}>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 font-bold text-base text-foreground">
-                      {tarifa.turno === "Diurno" ? <Sun className="h-5 w-5 text-amber-500" /> : <Moon className="h-5 w-5 text-indigo-500" />}
-                      T. {tarifa.turno}
-                    </div>
-                    <Badge variant="outline" className={`font-semibold bg-white ${tarifa.turno === "Diurno" ? "text-amber-700 border-amber-200" : "text-indigo-700 border-indigo-200"}`}>
-                      {tarifa.horario}
-                    </Badge>
-                  </div>
-                  <div className="text-2xl font-black font-mono tracking-tight">${tarifa.importe.toLocaleString("es-MX")}</div>
-                  <Button
-                    type="button"
-                    className="w-full font-bold shadow-sm"
-                    variant={tarifa.turno === "Diurno" ? "default" : "secondary"}
-                    onClick={() => {
-                      form.setValue("tipo", "Cargo");
-                      form.setValue("concepto", `Consulta general (${tarifa.turno})`);
-                      form.setValue("importe", tarifa.importe);
-                      setDefaultTipo("Cargo");
-                    }}
-                  >
-                    <Stethoscope className="h-4 w-4 mr-2" /> Insertar Cargo
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          
-          {clienteData && (
-            <Card className="shadow-sm border-0 bg-muted/20">
-              <CardContent className="p-6">
-                <div className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-2">Estado de Cuenta Vigente</div>
-                <div className={`text-3xl font-black tracking-tight ${clienteData.saldo > 0 ? "text-destructive" : "text-foreground"}`}>
-                  ${clienteData.saldo.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
-                </div>
-                {clienteData.saldo > 0 && <p className="text-xs font-semibold text-destructive mt-1">Acumulación pasiva a la fecha.</p>}
-              </CardContent>
-            </Card>
-          )}
-        </div>
-
-        {/* Main Form */}
-        <div className="lg:col-span-2">
-          <Card className={`shadow-sm border-t-4 transition-colors ${isPago ? "border-t-emerald-500" : isCargo ? "border-t-destructive" : "border-t-primary"}`}>
+      <Card className={`shadow-sm border-t-4 transition-colors ${isPago ? "border-t-emerald-500" : isCargo ? "border-t-destructive" : "border-t-primary"}`}>
             <CardContent className="p-8">
               <Form {...form}>
                 <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
@@ -361,8 +304,6 @@ export default function MovimientoNuevo() {
               </Form>
             </CardContent>
           </Card>
-        </div>
-      </div>
     </div>
   );
 }

@@ -34,10 +34,9 @@ router.post("/pacientes/:pacienteId/recetas", async (req, res): Promise<void> =>
   const { partidas, ...recetaData } = parsed.data;
   const [receta] = await db.insert(recetasTable).values({ ...recetaData, pacienteId }).returning();
 
-  const insertedPartidas = await db
-    .insert(recetaPartidasTable)
-    .values(partidas.map((p) => ({ ...p, recetaId: receta.id })))
-    .returning();
+  const insertedPartidas = partidas?.length
+    ? await db.insert(recetaPartidasTable).values(partidas.map((p) => ({ ...p, recetaId: receta.id }))).returning()
+    : [];
 
   const payload = {
     ...receta,
@@ -85,7 +84,11 @@ router.get("/recetas/:recetaId", async (req, res): Promise<void> => {
     creadoEn: receta.creadoEn.toISOString(),
   };
 
-  res.json({ ...GetRecetaResponse.parse(payload), archivoImagen: receta.archivoImagen ?? null });
+  res.json({
+    ...GetRecetaResponse.parse(payload),
+    archivoImagen: receta.archivoImagen ?? null,
+    archivoAdjuntadoEn: receta.archivoAdjuntadoEn?.toISOString() ?? null,
+  });
 });
 
 // PATCH /recetas/:recetaId/archivo  — guarda la ruta de la imagen de la receta
@@ -96,12 +99,18 @@ router.patch("/recetas/:recetaId/archivo", async (req, res): Promise<void> => {
   const { archivoImagen } = req.body as { archivoImagen: string | null };
   const [updated] = await db
     .update(recetasTable)
-    .set({ archivoImagen: archivoImagen ?? null })
+    .set({
+      archivoImagen: archivoImagen ?? null,
+      archivoAdjuntadoEn: archivoImagen ? new Date() : null,
+    })
     .where(eq(recetasTable.id, recetaId))
     .returning();
   if (!updated) { res.status(404).json({ error: "Receta no encontrada" }); return; }
 
-  res.json({ archivoImagen: updated.archivoImagen });
+  res.json({
+    archivoImagen: updated.archivoImagen,
+    archivoAdjuntadoEn: updated.archivoAdjuntadoEn?.toISOString() ?? null,
+  });
 });
 
 // DELETE /recetas/:recetaId

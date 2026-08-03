@@ -1,14 +1,21 @@
 import { useGetDashboard, getGetDashboardQueryKey } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Users, Cat, Stethoscope, Clock, CalendarCheck, Activity } from "lucide-react";
+import { Users, Cat, Stethoscope, Clock, CalendarCheck, Activity, BedDouble, AlertTriangle } from "lucide-react";
 import { Link } from "wouter";
 import { format } from "date-fns";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useState } from "react";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
 
 export default function Dashboard() {
   const { data, isLoading, isError } = useGetDashboard({
     query: { queryKey: getGetDashboardQueryKey() }
   });
+  const [showCitas, setShowCitas] = useState(false);
+  const [showHospitalizados, setShowHospitalizados] = useState(false);
 
   if (isLoading) {
     return (
@@ -80,7 +87,11 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        <Card className="hover:shadow-md transition-shadow">
+        {/* Próximas citas — clickable */}
+        <Card
+          className="hover:shadow-md transition-shadow cursor-pointer hover:border-blue-300 hover:ring-1 hover:ring-blue-200 select-none"
+          onClick={() => setShowCitas(true)}
+        >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
             <CardTitle className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Próximas citas</CardTitle>
             <div className="h-10 w-10 bg-blue-100 rounded-full flex items-center justify-center">
@@ -89,11 +100,114 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-foreground">{data.stats.proximasCitas}</div>
-            <p className="text-xs text-muted-foreground mt-1">programadas</p>
+            <p className="text-xs text-blue-500 mt-1 font-medium">Ver detalle →</p>
           </CardContent>
         </Card>
       </div>
 
+      {/* Hospitalizados — card + dialog */}
+      {(data.stats.hospitalizados > 0) && (
+        <Card
+          className="hover:shadow-md transition-shadow cursor-pointer hover:border-orange-300 hover:ring-1 hover:ring-orange-200 select-none border-l-4 border-l-orange-400"
+          onClick={() => setShowHospitalizados(true)}
+        >
+          <CardContent className="p-6 flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div className="h-12 w-12 bg-orange-100 rounded-full flex items-center justify-center shrink-0">
+                <BedDouble className="h-6 w-6 text-orange-600" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Pacientes hospitalizados</p>
+                <p className="text-3xl font-bold text-foreground">{data.stats.hospitalizados}</p>
+              </div>
+            </div>
+            <p className="text-xs text-orange-500 font-medium">Ver quiénes son →</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Dialog — pacientes hospitalizados */}
+      <Dialog open={showHospitalizados} onOpenChange={setShowHospitalizados}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-xl">
+              <BedDouble className="h-5 w-5 text-orange-600" /> Pacientes hospitalizados actualmente
+            </DialogTitle>
+          </DialogHeader>
+          <div className="divide-y">
+            {data.hospitalizadosLista.map((h) => {
+              const estadoColor: Record<string, string> = {
+                "Crítico":         "bg-red-100 text-red-800 border-red-200",
+                "Grave":           "bg-orange-100 text-orange-800 border-orange-200",
+                "Estable":         "bg-blue-100 text-blue-800 border-blue-200",
+                "En recuperación": "bg-emerald-100 text-emerald-800 border-emerald-200",
+              };
+              const dias = Math.ceil((Date.now() - new Date(h.fechaIngreso + "T12:00:00").getTime()) / 86400000);
+              return (
+                <Link key={h.id} href={`/hospitalizaciones/${h.id}`} onClick={() => setShowHospitalizados(false)}>
+                  <div className="py-4 flex items-center gap-4 hover:bg-muted/30 -mx-6 px-6 transition-colors cursor-pointer">
+                    <div className="h-11 w-11 bg-orange-100 rounded-full flex items-center justify-center shrink-0">
+                      <BedDouble className="h-5 w-5 text-orange-600" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-foreground">{h.paciente}</p>
+                      <p className="text-sm text-muted-foreground">{h.propietario}</p>
+                      <p className="text-xs text-muted-foreground/70 mt-0.5 truncate">{h.motivo}</p>
+                    </div>
+                    <div className="flex flex-col items-end gap-1.5 shrink-0">
+                      <span className={`text-xs font-bold px-2 py-0.5 rounded-full border ${estadoColor[h.estado] ?? "bg-slate-100 text-slate-700 border-slate-200"}`}>
+                        {h.estado === "Crítico" && <AlertTriangle className="inline h-3 w-3 mr-1" />}
+                        {h.estado}
+                      </span>
+                      <span className="text-xs text-muted-foreground">{dias} día{dias !== 1 ? "s" : ""}</span>
+                    </div>
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog — lista de próximas citas */}
+      <Dialog open={showCitas} onOpenChange={setShowCitas}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-xl">
+              <CalendarCheck className="h-5 w-5 text-blue-600" /> Próximas citas programadas
+            </DialogTitle>
+          </DialogHeader>
+
+          {data.proximasCitasLista.length === 0 ? (
+            <div className="text-center py-12 text-muted-foreground">
+              <CalendarCheck className="h-10 w-10 mx-auto mb-3 opacity-20" />
+              <p className="font-medium">No hay citas próximas registradas.</p>
+            </div>
+          ) : (
+            <div className="divide-y">
+              {data.proximasCitasLista.map((cita) => (
+                <Link key={cita.id} href={`/pacientes/${cita.pacienteId}`} onClick={() => setShowCitas(false)}>
+                  <div className="py-4 flex items-center gap-4 hover:bg-muted/30 -mx-6 px-6 transition-colors cursor-pointer">
+                    <div className="h-11 w-11 bg-blue-100 rounded-full flex items-center justify-center shrink-0">
+                      <Cat className="h-5 w-5 text-blue-600" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-foreground">{cita.paciente}</p>
+                      <p className="text-sm text-muted-foreground">{cita.propietario}</p>
+                      {cita.motivo && <p className="text-xs text-muted-foreground/70 mt-0.5 truncate">{cita.motivo}</p>}
+                    </div>
+                    <Badge className="bg-blue-100 text-blue-800 border-blue-200 border font-semibold text-xs shrink-0">
+                      {format(new Date(cita.proximaCita + "T12:00:00"), "dd/MM/yyyy")}
+                    </Badge>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Consultas recientes */}
       <Card className="border-t-4 border-t-primary shadow-sm overflow-hidden">
         <CardHeader className="bg-muted/30 pb-6">
           <CardTitle className="text-xl">Consultas recientes</CardTitle>
