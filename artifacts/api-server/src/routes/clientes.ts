@@ -135,6 +135,16 @@ router.get("/clientes/:clienteId", async (req, res): Promise<void> => {
   res.json(GetClienteResponse.parse(payload));
 });
 
+// PATCH /clientes/:clienteId/hoja-conceptos
+router.patch("/clientes/:clienteId/hoja-conceptos", async (req, res): Promise<void> => {
+  const clienteId = parseInt(Array.isArray(req.params.clienteId) ? req.params.clienteId[0] : req.params.clienteId, 10);
+  if (isNaN(clienteId)) { res.status(404).json({ error: "Not found" }); return; }
+  const { hojaConceptos } = req.body as { hojaConceptos: string | null };
+  const [updated] = await db.update(clientesTable).set({ hojaConceptos: hojaConceptos ?? null }).where(eq(clientesTable.id, clienteId)).returning();
+  if (!updated) { res.status(404).json({ error: "Cliente no encontrado" }); return; }
+  res.json({ hojaConceptos: updated.hojaConceptos });
+});
+
 // PUT /clientes/:clienteId
 router.put("/clientes/:clienteId", async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.clienteId) ? req.params.clienteId[0] : req.params.clienteId;

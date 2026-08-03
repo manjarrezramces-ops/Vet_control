@@ -3,6 +3,7 @@ import { useGetCliente, getGetClienteQueryKey, useDeleteCliente } from "@workspa
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
+import { useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,8 +11,11 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import {
-  ArrowLeft, Plus, Edit, Trash2, MapPin, Phone, Mail, FileText, User, Cat, CreditCard, Calendar
+  ArrowLeft, Plus, Edit, Trash2, MapPin, Phone, Mail, FileText, User, Cat, Calendar,
+  Upload, X, ImageIcon, Loader2
 } from "lucide-react";
+
+const BASE = () => (import.meta.env.BASE_URL as string).replace(/\/$/, "");
 import {
   AlertDialog,
   AlertDialogAction,
@@ -39,6 +43,8 @@ export default function ClienteDetalle() {
   });
 
   const deleteCliente = useDeleteCliente();
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   if (isLoading) {
     return <div className="space-y-8">
@@ -54,10 +60,50 @@ export default function ClienteDetalle() {
     return <div className="text-destructive font-medium text-lg">Error al cargar el cliente.</div>;
   }
 
-  const { cliente, saldo, pacientes, movimientos } = data;
+  const { cliente, saldo, pacientes } = data;
 
-  const formatMoney = (amount: number) => {
-    return new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(amount);
+  const formatMoney = (amount: number) =>
+    new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(amount);
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const urlRes = await fetch(`${BASE()}/api/storage/uploads/request-url`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: file.name, size: file.size, contentType: file.type }),
+      });
+      const { uploadURL, objectPath } = await urlRes.json();
+      await fetch(uploadURL, { method: "PUT", headers: { "Content-Type": file.type }, body: file });
+      await fetch(`${BASE()}/api/clientes/${id}/hoja-conceptos`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ hojaConceptos: objectPath }),
+      });
+      queryClient.invalidateQueries({ queryKey: getGetClienteQueryKey(id) });
+      toast({ title: "Hoja de conceptos actualizada" });
+    } catch {
+      toast({ variant: "destructive", title: "Error al subir el archivo" });
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const handleRemoveHoja = async () => {
+    try {
+      await fetch(`${BASE()}/api/clientes/${id}/hoja-conceptos`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ hojaConceptos: null }),
+      });
+      queryClient.invalidateQueries({ queryKey: getGetClienteQueryKey(id) });
+      toast({ title: "Archivo eliminado" });
+    } catch {
+      toast({ variant: "destructive", title: "Error al eliminar" });
+    }
   };
 
   const handleDelete = () => {
@@ -229,81 +275,97 @@ export default function ClienteDetalle() {
           </Card>
         </div>
 
-        {/* Saldo & Movimientos Column */}
-        <div className="space-y-8">
-          <Card className={`shadow-sm overflow-hidden ${saldo > 0 ? "border-t-4 border-t-destructive" : "border-t-4 border-t-primary"}`}>
+        {/* Adeudo + Hoja de conceptos */}
+        <div className="space-y-6">
+
+          {/* Adeudo */}
+          <Card className={`shadow-sm border-t-4 ${saldo > 0 ? "border-t-destructive" : "border-t-primary"}`}>
             <CardContent className="p-8 text-center bg-muted/10">
-              <div className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-3">Balance de Cuenta</div>
-              <div className={`text-5xl font-black mb-4 tracking-tight ${saldo > 0 ? "text-destructive" : "text-foreground"}`}>
+              <div className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-2">Adeudo al día</div>
+              <div className="text-xs text-muted-foreground mb-4 font-medium">
+                {format(new Date(), "dd 'de' MMMM 'de' yyyy")}
+              </div>
+              <div className={`text-5xl font-black tracking-tight ${saldo > 0 ? "text-destructive" : "text-foreground"}`}>
                 {formatMoney(saldo)}
               </div>
               {saldo > 0 && (
-                <Badge variant="destructive" className="mb-6 px-3 py-1 text-xs uppercase tracking-wider font-bold">Adeudo Pendiente</Badge>
+                <Badge variant="destructive" className="mt-4 px-3 py-1 text-xs uppercase tracking-wider font-bold">
+                  Pendiente de pago
+                </Badge>
               )}
-              <div className="grid grid-cols-2 gap-3 mt-4">
-                <Link href={`/clientes/${id}/movimientos/nuevo?tipo=Cargo`} className="w-full">
-                  <Button variant="outline" className="w-full h-12 shadow-sm border-destructive/20 hover:bg-destructive/5 text-destructive" size="lg">
-                    <CreditCard className="mr-2 h-5 w-5" /> Cargo
-                  </Button>
-                </Link>
-                <Link href={`/clientes/${id}/movimientos/nuevo?tipo=Pago`} className="w-full">
-                  <Button variant="default" className="w-full h-12 shadow-sm bg-emerald-600 hover:bg-emerald-700 text-white" size="lg">
-                    <Plus className="mr-2 h-5 w-5" /> Abono
-                  </Button>
-                </Link>
-              </div>
+              {saldo === 0 && (
+                <Badge className="mt-4 px-3 py-1 text-xs uppercase tracking-wider font-bold bg-emerald-100 text-emerald-800 hover:bg-emerald-100">
+                  Al corriente
+                </Badge>
+              )}
             </CardContent>
           </Card>
 
+          {/* Hoja de conceptos */}
           <Card className="shadow-sm">
-            <CardHeader className="bg-muted/20 pb-4 border-b">
-              <CardTitle className="text-xl">Historial Financiero</CardTitle>
+            <CardHeader className="pb-4 border-b bg-muted/20">
+              <CardTitle className="text-base flex items-center gap-2">
+                <FileText className="h-4 w-4 text-primary" /> Hoja de conceptos
+              </CardTitle>
             </CardHeader>
-            <CardContent className="p-0">
-              <div className="relative w-full overflow-auto max-h-[500px]">
-                <table className="w-full caption-bottom text-sm">
-                  <thead className="[&_tr]:border-b sticky top-0 bg-white shadow-sm z-10">
-                    <tr className="border-b transition-colors">
-                      <th className="h-12 px-5 text-left align-middle text-xs font-semibold text-muted-foreground uppercase tracking-wider">Fecha</th>
-                      <th className="h-12 px-5 text-left align-middle text-xs font-semibold text-muted-foreground uppercase tracking-wider">Concepto</th>
-                      <th className="h-12 px-5 text-right align-middle text-xs font-semibold text-muted-foreground uppercase tracking-wider">Importe</th>
-                    </tr>
-                  </thead>
-                  <tbody className="[&_tr:last-child]:border-0">
-                    {movimientos.length === 0 ? (
-                      <tr>
-                        <td colSpan={3} className="py-12 text-center text-muted-foreground">
-                          <p className="font-medium">No hay movimientos registrados.</p>
-                        </td>
-                      </tr>
-                    ) : (
-                      movimientos.map((mov) => (
-                        <tr key={mov.id} className="border-b transition-colors hover:bg-muted/30">
-                          <td className="p-5 align-middle whitespace-nowrap text-muted-foreground font-medium">
-                            {format(new Date(mov.fecha), "dd/MM/yy")}
-                          </td>
-                          <td className="p-5 align-middle">
-                            <div className="font-semibold text-foreground">{mov.concepto}</div>
-                            {mov.metodoPago && (
-                              <div className="text-xs text-muted-foreground mt-1 font-medium">{mov.metodoPago}</div>
-                            )}
-                          </td>
-                          <td className="p-5 align-middle text-right">
-                            <Badge 
-                              variant={mov.tipo === "Cargo" ? "destructive" : mov.tipo === "Pago" ? "default" : "secondary"}
-                              className={`font-mono text-sm px-2 py-1 ${mov.tipo === "Pago" ? "bg-emerald-100 text-emerald-800 hover:bg-emerald-100" : ""}`}
-                            >
-                              {mov.tipo === "Cargo" ? "+" : "-"}{formatMoney(mov.importe)}
-                            </Badge>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
+            <CardContent className="p-6">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/jpg"
+                className="hidden"
+                onChange={handleFileChange}
+              />
+              {cliente.hojaConceptos ? (
+                <div className="space-y-4">
+                  <div className="rounded-xl overflow-hidden border border-border shadow-sm">
+                    <img
+                      src={`${BASE()}/api/storage/files/${encodeURIComponent(cliente.hojaConceptos)}`}
+                      alt="Hoja de conceptos"
+                      className="w-full object-contain max-h-[500px]"
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="flex-1"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={uploading}
+                    >
+                      {uploading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Upload className="h-4 w-4 mr-2" />}
+                      Reemplazar
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-destructive hover:bg-destructive/10"
+                      onClick={handleRemoveHoja}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploading}
+                  className="w-full border-2 border-dashed border-border rounded-xl p-10 flex flex-col items-center gap-3 hover:border-primary/50 hover:bg-muted/20 transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  {uploading ? (
+                    <Loader2 className="h-10 w-10 text-muted-foreground animate-spin" />
+                  ) : (
+                    <ImageIcon className="h-10 w-10 text-muted-foreground/40" />
+                  )}
+                  <span className="text-sm font-medium text-muted-foreground">
+                    {uploading ? "Subiendo..." : "Adjuntar PNG / JPG"}
+                  </span>
+                </button>
+              )}
             </CardContent>
           </Card>
+
         </div>
       </div>
     </div>

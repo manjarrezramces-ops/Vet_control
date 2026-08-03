@@ -25,13 +25,20 @@ const formSchema = z.object({
   hora: z.string().optional(),
   medico: z.string().optional(),
   motivo: z.string().min(1, "El motivo es obligatorio"),
-  peso: z.coerce.number().optional().or(z.literal("")),
-  temperatura: z.coerce.number().optional().or(z.literal("")),
-  frecuenciaCardiaca: z.coerce.number().optional().or(z.literal("")),
-  frecuenciaRespiratoria: z.coerce.number().optional().or(z.literal("")),
-  mucosas: z.string().optional(),
-  trc: z.string().optional(),
-  condicionCorporal: z.string().optional(),
+  // EFG
+  cc: z.string().optional(),
+  mm: z.string().optional(),
+  em: z.string().optional(),
+  tllc: z.string().optional(),
+  ln: z.string().optional(),
+  fc: z.coerce.number().optional().or(z.literal("")),
+  dh: z.string().optional(),
+  fr: z.coerce.number().optional().or(z.literal("")),
+  rt: z.string().optional(),
+  cp: z.string().optional(),
+  rd: z.string().optional(),
+  pp: z.string().optional(),
+  pa: z.string().optional(),
   anamnesis: z.string().optional(),
   exploracionFisica: z.string().optional(),
   diagnosticosDiferenciales: z.string().optional(),
@@ -72,15 +79,9 @@ export default function ConsultaNueva() {
       hora: format(new Date(), "HH:mm"),
       medico: "",
       motivo: "",
-      peso: pacienteData?.paciente.peso || "",
-      temperatura: "",
-      frecuenciaCardiaca: "",
-      frecuenciaRespiratoria: "",
-      mucosas: "",
-      trc: "",
-      condicionCorporal: "",
+      cc: "", em: "", mm: "", tllc: "", ln: "",
+      fc: "", dh: "", fr: "", rt: "", cp: "", rd: "", pp: "", pa: "",
       anamnesis: "",
-      exploracionFisica: "",
       diagnosticosDiferenciales: "",
       diagnostico: "",
       plan: "",
@@ -102,11 +103,31 @@ export default function ConsultaNueva() {
     setSaving(true);
     try {
       const payload = {
-        ...values,
-        peso: (values.peso === "" || isNaN(Number(values.peso))) ? undefined : Number(values.peso),
-        temperatura: (values.temperatura === "" || isNaN(Number(values.temperatura))) ? undefined : Number(values.temperatura),
-        frecuenciaCardiaca: (values.frecuenciaCardiaca === "" || isNaN(Number(values.frecuenciaCardiaca))) ? undefined : Number(values.frecuenciaCardiaca),
-        frecuenciaRespiratoria: (values.frecuenciaRespiratoria === "" || isNaN(Number(values.frecuenciaRespiratoria))) ? undefined : Number(values.frecuenciaRespiratoria),
+        fecha: values.fecha,
+        hora: values.hora || undefined,
+        medico: values.medico || undefined,
+        motivo: values.motivo,
+        frecuenciaCardiaca: (values.fc === "" || isNaN(Number(values.fc))) ? undefined : Number(values.fc),
+        frecuenciaRespiratoria: (values.fr === "" || isNaN(Number(values.fr))) ? undefined : Number(values.fr),
+        mucosas: values.mm || undefined,
+        trc: values.tllc || undefined,
+        condicionCorporal: values.cc || undefined,
+        estadoMental: values.em || undefined,
+        linfonodos: values.ln || undefined,
+        deshidratacion: values.dh || undefined,
+        ruidosTransito: values.rt || undefined,
+        condicionPulso: values.cp || undefined,
+        ruidosDorsales: values.rd || undefined,
+        pp: values.pp || undefined,
+        presionArterial: values.pa || undefined,
+        anamnesis: values.anamnesis || undefined,
+        diagnostico: values.diagnostico || undefined,
+        diagnosticosDiferenciales: values.diagnosticosDiferenciales || undefined,
+        plan: values.plan || undefined,
+        tratamiento: values.tratamiento || undefined,
+        pronostico: values.pronostico || undefined,
+        proximaCita: values.proximaCita || undefined,
+        observaciones: values.observaciones || undefined,
       };
 
       // 1. Crear consulta
@@ -211,61 +232,103 @@ export default function ConsultaNueva() {
                 </div>
               </div>
 
-              {/* ── Examen físico ── */}
+              {/* ── Examen físico general ── */}
               <div className="space-y-6">
                 <div className="border-b pb-4">
                   <h3 className="text-xl font-semibold tracking-tight text-foreground flex items-center gap-2">
                     <Activity className="h-5 w-5 text-primary" /> Examen físico general
                   </h3>
                 </div>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-6">
-                  <FormField control={form.control} name="peso" render={({ field }) => (
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                  {/* CC */}
+                  <FormField control={form.control} name="cc" render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-base font-semibold">Peso (kg)</FormLabel>
-                      <FormControl><Input className="h-12 text-base font-mono bg-primary/5" type="number" step="0.01" placeholder="0.0" {...field} /></FormControl>
-                      <FormMessage />
+                      <FormLabel className="font-bold text-muted-foreground tracking-wider">CC</FormLabel>
+                      <FormControl><Input className="h-11 text-base font-mono" placeholder="3/5" {...field} /></FormControl>
                     </FormItem>
                   )} />
-                  <FormField control={form.control} name="temperatura" render={({ field }) => (
+                  {/* MM */}
+                  <FormField control={form.control} name="mm" render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-base font-semibold">Temp. (°C)</FormLabel>
-                      <FormControl><Input className="h-12 text-base font-mono" type="number" step="0.1" placeholder="38.5" {...field} /></FormControl>
-                      <FormMessage />
+                      <FormLabel className="font-bold text-muted-foreground tracking-wider">MM</FormLabel>
+                      <FormControl><Input className="h-11 text-base" placeholder="Rosadas" {...field} /></FormControl>
                     </FormItem>
                   )} />
-                  <FormField control={form.control} name="frecuenciaCardiaca" render={({ field }) => (
+                  {/* E.M. */}
+                  <FormField control={form.control} name="em" render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-base font-semibold">F. Cardíaca (lpm)</FormLabel>
-                      <FormControl><Input className="h-12 text-base font-mono" type="number" placeholder="100" {...field} /></FormControl>
-                      <FormMessage />
+                      <FormLabel className="font-bold text-muted-foreground tracking-wider">E.M.</FormLabel>
+                      <FormControl><Input className="h-11 text-base" placeholder="Alerta" {...field} /></FormControl>
                     </FormItem>
                   )} />
-                  <FormField control={form.control} name="frecuenciaRespiratoria" render={({ field }) => (
+                  {/* TLLC */}
+                  <FormField control={form.control} name="tllc" render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-base font-semibold">F. Resp. (rpm)</FormLabel>
-                      <FormControl><Input className="h-12 text-base font-mono" type="number" placeholder="20" {...field} /></FormControl>
-                      <FormMessage />
+                      <FormLabel className="font-bold text-muted-foreground tracking-wider">TLLC</FormLabel>
+                      <FormControl><Input className="h-11 text-base font-mono" placeholder="&lt; 2s" {...field} /></FormControl>
                     </FormItem>
                   )} />
-                  <FormField control={form.control} name="mucosas" render={({ field }) => (
-                    <FormItem className="md:col-span-2">
-                      <FormLabel className="text-base font-semibold">Estado de Mucosas</FormLabel>
-                      <FormControl><Input className="h-12 text-base" placeholder="Rosadas, pálidas, cianóticas..." {...field} /></FormControl>
-                      <FormMessage />
+                  {/* LN */}
+                  <FormField control={form.control} name="ln" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="font-bold text-muted-foreground tracking-wider">LN</FormLabel>
+                      <FormControl><Input className="h-11 text-base" placeholder="Normales" {...field} /></FormControl>
                     </FormItem>
                   )} />
-                  <FormField control={form.control} name="trc" render={({ field }) => (
+                  {/* FC */}
+                  <FormField control={form.control} name="fc" render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-base font-semibold">T.R.C. (seg)</FormLabel>
-                      <FormControl><Input className="h-12 text-base font-mono" placeholder="< 2" {...field} /></FormControl>
-                      <FormMessage />
+                      <FormLabel className="font-bold text-muted-foreground tracking-wider">FC</FormLabel>
+                      <FormControl><Input className="h-11 text-base font-mono" type="number" placeholder="lpm" {...field} /></FormControl>
                     </FormItem>
                   )} />
-                  <FormField control={form.control} name="condicionCorporal" render={({ field }) => (
+                  {/* %DH */}
+                  <FormField control={form.control} name="dh" render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-base font-semibold">C.C. (escala)</FormLabel>
-                      <FormControl><Input className="h-12 text-base font-mono" placeholder="3/5" {...field} /></FormControl>
-                      <FormMessage />
+                      <FormLabel className="font-bold text-muted-foreground tracking-wider">%DH</FormLabel>
+                      <FormControl><Input className="h-11 text-base font-mono" placeholder="&lt; 5%" {...field} /></FormControl>
+                    </FormItem>
+                  )} />
+                  {/* FR */}
+                  <FormField control={form.control} name="fr" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="font-bold text-muted-foreground tracking-wider">FR</FormLabel>
+                      <FormControl><Input className="h-11 text-base font-mono" type="number" placeholder="rpm" {...field} /></FormControl>
+                    </FormItem>
+                  )} />
+                  {/* RT */}
+                  <FormField control={form.control} name="rt" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="font-bold text-muted-foreground tracking-wider">RT</FormLabel>
+                      <FormControl><Input className="h-11 text-base" placeholder="Presentes" {...field} /></FormControl>
+                    </FormItem>
+                  )} />
+                  {/* CP */}
+                  <FormField control={form.control} name="cp" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="font-bold text-muted-foreground tracking-wider">CP</FormLabel>
+                      <FormControl><Input className="h-11 text-base" placeholder="Fuerte" {...field} /></FormControl>
+                    </FormItem>
+                  )} />
+                  {/* RD */}
+                  <FormField control={form.control} name="rd" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="font-bold text-muted-foreground tracking-wider">RD</FormLabel>
+                      <FormControl><Input className="h-11 text-base" placeholder="Normales" {...field} /></FormControl>
+                    </FormItem>
+                  )} />
+                  {/* PP */}
+                  <FormField control={form.control} name="pp" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="font-bold text-muted-foreground tracking-wider">PP</FormLabel>
+                      <FormControl><Input className="h-11 text-base font-mono" placeholder="—" {...field} /></FormControl>
+                    </FormItem>
+                  )} />
+                  {/* PA */}
+                  <FormField control={form.control} name="pa" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="font-bold text-muted-foreground tracking-wider">PA</FormLabel>
+                      <FormControl><Input className="h-11 text-base font-mono" placeholder="mmHg" {...field} /></FormControl>
                     </FormItem>
                   )} />
                 </div>
@@ -278,22 +341,13 @@ export default function ConsultaNueva() {
                     <ClipboardList className="h-5 w-5 text-primary" /> Exploración clínica
                   </h3>
                 </div>
-                <div className="grid grid-cols-1 gap-8">
-                  <FormField control={form.control} name="anamnesis" render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-base font-semibold">Anamnesis</FormLabel>
-                      <FormControl><Textarea className="min-h-[120px] text-base resize-y" placeholder="Evolución de síntomas, tiempo de inicio..." {...field} /></FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )} />
-                  <FormField control={form.control} name="exploracionFisica" render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-base font-semibold">Exploración física por sistemas</FormLabel>
-                      <FormControl><Textarea className="min-h-[120px] text-base resize-y" placeholder="Auscultación, palpación abdominal, reflejos..." {...field} /></FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )} />
-                </div>
+                <FormField control={form.control} name="anamnesis" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-base font-semibold">Anamnesis</FormLabel>
+                    <FormControl><Textarea className="min-h-[120px] text-base resize-y" placeholder="Evolución de síntomas, tiempo de inicio..." {...field} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
               </div>
 
               {/* ── Diagnóstico y plan ── */}

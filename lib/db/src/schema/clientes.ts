@@ -12,6 +12,7 @@ export const clientesTable = pgTable("clientes", {
   rfc: text("rfc"),
   direccion: text("direccion"),
   notas: text("notas"),
+  hojaConceptos: text("hoja_conceptos"),
   creadoEn: timestamp("creado_en", { withTimezone: true }).notNull().defaultNow(),
 });
 
