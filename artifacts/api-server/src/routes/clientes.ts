@@ -117,7 +117,7 @@ router.get("/clientes/:clienteId", async (req, res): Promise<void> => {
     .orderBy(sql`${movimientosTable.fecha} DESC, ${movimientosTable.creadoEn} DESC`);
 
   const payload = {
-    cliente: { ...cliente, creadoEn: cliente.creadoEn.toISOString() },
+    cliente: { ...cliente, creadoEn: cliente.creadoEn.toISOString(), adeudoMonto: cliente.adeudoMonto != null ? Number(cliente.adeudoMonto) : null },
     saldo: parseFloat(saldoRow.saldo as string),
     pacientes: pacientes.map((p) => ({
       ...p,
