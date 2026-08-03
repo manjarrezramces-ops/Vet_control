@@ -195,14 +195,14 @@ export default function RecetaDetalle() {
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-2">
                 <ImageIcon className="h-5 w-5 text-primary" />
-                <h3 className="text-sm font-bold uppercase tracking-wider text-foreground">Imagen de Receta</h3>
+                <h3 className="text-sm font-bold uppercase tracking-wider text-foreground">Archivo de Receta</h3>
               </div>
               {!archivo && (
                 <Button variant="outline" size="sm" disabled={uploading} onClick={() => fileInputRef.current?.click()} className="font-semibold">
                   {uploading ? (
                     <><div className="h-3.5 w-3.5 mr-2 animate-spin rounded-full border-2 border-primary border-t-transparent" />Subiendo...</>
                   ) : (
-                    <><Upload className="h-3.5 w-3.5 mr-2" />Adjuntar imagen</>
+                    <><Upload className="h-3.5 w-3.5 mr-2" />Adjuntar archivo</>
                   )}
                 </Button>
               )}
@@ -211,18 +211,30 @@ export default function RecetaDetalle() {
             <input
               ref={fileInputRef}
               type="file"
-              accept=".png"
+              accept=".png,.jpg,.jpeg,.pdf"
               className="hidden"
               onChange={handleFileChange}
             />
 
             {archivo ? (
               <div className="flex items-start gap-4 p-4 bg-muted/20 rounded-xl border border-border/50">
-                <img
-                  src={`${BASE}/api/storage${archivo}`}
-                  alt="Imagen de receta"
-                  className="max-h-72 rounded-lg object-contain border shadow-sm"
-                />
+                {archivo.toLowerCase().endsWith(".pdf") ? (
+                  <div className="flex items-center gap-4 flex-1">
+                    <div className="h-16 w-16 bg-primary/10 rounded-xl flex items-center justify-center border border-primary/20 shrink-0">
+                      <svg className="h-8 w-8 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-sm text-foreground">Receta en PDF</p>
+                      <a href={`${BASE}/api/storage${archivo}`} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline font-medium">Abrir PDF →</a>
+                    </div>
+                  </div>
+                ) : (
+                  <img
+                    src={`${BASE}/api/storage${archivo}`}
+                    alt="Archivo de receta"
+                    className="max-h-72 rounded-lg object-contain border shadow-sm"
+                  />
+                )}
                 <div className="ml-auto shrink-0 flex flex-col gap-2">
                   <Button variant="ghost" size="sm" onClick={() => fileInputRef.current?.click()} disabled={uploading}>
                     <Upload className="h-4 w-4 mr-1.5" />Cambiar
@@ -238,8 +250,8 @@ export default function RecetaDetalle() {
                 className="border-2 border-dashed border-border/60 rounded-xl p-10 text-center cursor-pointer hover:border-primary/40 hover:bg-muted/20 transition-colors"
               >
                 <Upload className="h-8 w-8 mx-auto mb-3 text-muted-foreground/40" />
-                <p className="text-sm font-medium text-muted-foreground">Haz clic para adjuntar la imagen</p>
-                <p className="text-xs text-muted-foreground/60 mt-1">Solo PNG</p>
+                <p className="text-sm font-medium text-muted-foreground">Haz clic para adjuntar el archivo de receta</p>
+                <p className="text-xs text-muted-foreground/60 mt-1">PNG, JPG o PDF</p>
               </div>
             )}
           </CardContent>
