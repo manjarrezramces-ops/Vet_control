@@ -1,22 +1,34 @@
 openapi: 3.1.0
 info:
-  # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: VetControl API — veterinary clinic management system
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: dashboard
+    description: Dashboard statistics
+  - name: clientes
+    description: Client (owner) management
+  - name: pacientes
+    description: Patient (pet) management
+  - name: consultas
+    description: Consultation records
+  - name: recetas
+    description: Prescriptions
+  - name: pruebas
+    description: Diagnostic tests
+  - name: movimientos
+    description: Financial movements
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,6 +36,499 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /dashboard:
+    get:
+      operationId: getDashboard
+      tags: [dashboard]
+      summary: Get dashboard stats and recent consultations
+      responses:
+        "200":
+          description: Dashboard data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardData"
+
+  /clientes:
+    get:
+      operationId: getClientes
+      tags: [clientes]
+      summary: List clients with optional search
+      parameters:
+        - name: q
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of clients
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ClienteListItem"
+    post:
+      operationId: createCliente
+      tags: [clientes]
+      summary: Create a new client
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClienteInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Cliente"
+
+  /clientes/{clienteId}:
+    get:
+      operationId: getCliente
+      tags: [clientes]
+      summary: Get client detail with pets and movements
+      parameters:
+        - name: clienteId
+          in: path
+          required: true
+          schema:
+            type: number
+      responses:
+        "200":
+          description: Client detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClienteDetalle"
+        "404":
+          description: Not found
+    put:
+      operationId: updateCliente
+      tags: [clientes]
+      summary: Update a client
+      parameters:
+        - name: clienteId
+          in: path
+          required: true
+          schema:
+            type: number
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClienteInput"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Cliente"
+        "404":
+          description: Not found
+    delete:
+      operationId: deleteCliente
+      tags: [clientes]
+      summary: Delete a client and all associated data
+      parameters:
+        - name: clienteId
+          in: path
+          required: true
+          schema:
+            type: number
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+
+  /clientes/{clienteId}/movimientos:
+    post:
+      operationId: createMovimiento
+      tags: [movimientos]
+      summary: Create a financial movement for a client
+      parameters:
+        - name: clienteId
+          in: path
+          required: true
+          schema:
+            type: number
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MovimientoInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Movimiento"
+        "404":
+          description: Not found
+
+  /movimientos/{movimientoId}:
+    delete:
+      operationId: deleteMovimiento
+      tags: [movimientos]
+      summary: Delete a movement
+      parameters:
+        - name: movimientoId
+          in: path
+          required: true
+          schema:
+            type: number
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+
+  /pacientes:
+    get:
+      operationId: getPacientes
+      tags: [pacientes]
+      summary: List patients with optional search
+      parameters:
+        - name: q
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of patients
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PacienteListItem"
+    post:
+      operationId: createPaciente
+      tags: [pacientes]
+      summary: Create a new patient
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PacienteInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Paciente"
+
+  /pacientes/{pacienteId}:
+    get:
+      operationId: getPaciente
+      tags: [pacientes]
+      summary: Get patient detail with full clinical history
+      parameters:
+        - name: pacienteId
+          in: path
+          required: true
+          schema:
+            type: number
+      responses:
+        "200":
+          description: Patient detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PacienteDetalle"
+        "404":
+          description: Not found
+    put:
+      operationId: updatePaciente
+      tags: [pacientes]
+      summary: Update a patient
+      parameters:
+        - name: pacienteId
+          in: path
+          required: true
+          schema:
+            type: number
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PacienteInput"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Paciente"
+        "404":
+          description: Not found
+    delete:
+      operationId: deletePaciente
+      tags: [pacientes]
+      summary: Delete a patient
+      parameters:
+        - name: pacienteId
+          in: path
+          required: true
+          schema:
+            type: number
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+
+  /pacientes/{pacienteId}/consultas:
+    post:
+      operationId: createConsulta
+      tags: [consultas]
+      summary: Create a consultation for a patient
+      parameters:
+        - name: pacienteId
+          in: path
+          required: true
+          schema:
+            type: number
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConsultaInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Consulta"
+        "404":
+          description: Not found
+
+  /consultas/{consultaId}:
+    get:
+      operationId: getConsulta
+      tags: [consultas]
+      summary: Get a consultation
+      parameters:
+        - name: consultaId
+          in: path
+          required: true
+          schema:
+            type: number
+      responses:
+        "200":
+          description: Consultation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Consulta"
+        "404":
+          description: Not found
+    put:
+      operationId: updateConsulta
+      tags: [consultas]
+      summary: Update a consultation
+      parameters:
+        - name: consultaId
+          in: path
+          required: true
+          schema:
+            type: number
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConsultaInput"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Consulta"
+        "404":
+          description: Not found
+    delete:
+      operationId: deleteConsulta
+      tags: [consultas]
+      summary: Delete a consultation
+      parameters:
+        - name: consultaId
+          in: path
+          required: true
+          schema:
+            type: number
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+
+  /pacientes/{pacienteId}/recetas:
+    post:
+      operationId: createReceta
+      tags: [recetas]
+      summary: Create a prescription for a patient
+      parameters:
+        - name: pacienteId
+          in: path
+          required: true
+          schema:
+            type: number
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RecetaInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecetaDetalle"
+        "404":
+          description: Not found
+
+  /recetas/{recetaId}:
+    get:
+      operationId: getReceta
+      tags: [recetas]
+      summary: Get a prescription with its items
+      parameters:
+        - name: recetaId
+          in: path
+          required: true
+          schema:
+            type: number
+      responses:
+        "200":
+          description: Prescription detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecetaDetalle"
+        "404":
+          description: Not found
+    delete:
+      operationId: deleteReceta
+      tags: [recetas]
+      summary: Delete a prescription
+      parameters:
+        - name: recetaId
+          in: path
+          required: true
+          schema:
+            type: number
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+
+  /pacientes/{pacienteId}/pruebas:
+    post:
+      operationId: createPrueba
+      tags: [pruebas]
+      summary: Create a diagnostic test for a patient
+      parameters:
+        - name: pacienteId
+          in: path
+          required: true
+          schema:
+            type: number
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PruebaInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Prueba"
+        "404":
+          description: Not found
+
+  /pruebas/{pruebaId}:
+    get:
+      operationId: getPrueba
+      tags: [pruebas]
+      summary: Get a diagnostic test
+      parameters:
+        - name: pruebaId
+          in: path
+          required: true
+          schema:
+            type: number
+      responses:
+        "200":
+          description: Diagnostic test
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Prueba"
+        "404":
+          description: Not found
+    put:
+      operationId: updatePrueba
+      tags: [pruebas]
+      summary: Update a diagnostic test
+      parameters:
+        - name: pruebaId
+          in: path
+          required: true
+          schema:
+            type: number
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PruebaInput"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Prueba"
+        "404":
+          description: Not found
+    delete:
+      operationId: deletePrueba
+      tags: [pruebas]
+      summary: Delete a diagnostic test
+      parameters:
+        - name: pruebaId
+          in: path
+          required: true
+          schema:
+            type: number
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +539,643 @@ components:
       required:
         - status
 
+    DashboardStats:
+      type: object
+      properties:
+        clientes:
+          type: number
+        pacientes:
+          type: number
+        consultas:
+          type: number
+        consultasHoy:
+          type: number
+        proximasCitas:
+          type: number
+      required:
+        - clientes
+        - pacientes
+        - consultas
+        - consultasHoy
+        - proximasCitas
+
+    ConsultaReciente:
+      type: object
+      properties:
+        id:
+          type: number
+        fecha:
+          type: string
+        pacienteId:
+          type: number
+        paciente:
+          type: string
+        propietario:
+          type: string
+        motivo:
+          type: string
+      required:
+        - id
+        - fecha
+        - pacienteId
+        - paciente
+        - propietario
+        - motivo
+
+    DashboardData:
+      type: object
+      properties:
+        stats:
+          $ref: "#/components/schemas/DashboardStats"
+        recientes:
+          type: array
+          items:
+            $ref: "#/components/schemas/ConsultaReciente"
+      required:
+        - stats
+        - recientes
+
+    Cliente:
+      type: object
+      properties:
+        id:
+          type: number
+        nombre:
+          type: string
+        apellidos:
+          type: ["string", "null"]
+        telefono:
+          type: string
+        telefonoAlterno:
+          type: ["string", "null"]
+        email:
+          type: ["string", "null"]
+        rfc:
+          type: ["string", "null"]
+        direccion:
+          type: ["string", "null"]
+        notas:
+          type: ["string", "null"]
+        creadoEn:
+          type: string
+      required:
+        - id
+        - nombre
+        - telefono
+        - creadoEn
+
+    ClienteListItem:
+      type: object
+      properties:
+        id:
+          type: number
+        nombre:
+          type: string
+        apellidos:
+          type: ["string", "null"]
+        telefono:
+          type: string
+        email:
+          type: ["string", "null"]
+        totalPacientes:
+          type: number
+        saldo:
+          type: number
+      required:
+        - id
+        - nombre
+        - telefono
+        - totalPacientes
+        - saldo
+
+    ClienteDetalle:
+      type: object
+      properties:
+        cliente:
+          $ref: "#/components/schemas/Cliente"
+        saldo:
+          type: number
+        pacientes:
+          type: array
+          items:
+            $ref: "#/components/schemas/PacienteListItem"
+        movimientos:
+          type: array
+          items:
+            $ref: "#/components/schemas/Movimiento"
+      required:
+        - cliente
+        - saldo
+        - pacientes
+        - movimientos
+
+    ClienteInput:
+      type: object
+      properties:
+        nombre:
+          type: string
+          minLength: 1
+        apellidos:
+          type: string
+        telefono:
+          type: string
+          minLength: 1
+        telefonoAlterno:
+          type: string
+        email:
+          type: string
+        rfc:
+          type: string
+        direccion:
+          type: string
+        notas:
+          type: string
+      required:
+        - nombre
+        - telefono
+
+    Paciente:
+      type: object
+      properties:
+        id:
+          type: number
+        clienteId:
+          type: number
+        nombre:
+          type: string
+        especie:
+          type: string
+        raza:
+          type: ["string", "null"]
+        sexo:
+          type: ["string", "null"]
+        fechaNacimiento:
+          type: ["string", "null"]
+        color:
+          type: ["string", "null"]
+        peso:
+          type: ["number", "null"]
+        microchip:
+          type: ["string", "null"]
+        esterilizado:
+          type: boolean
+        estado:
+          type: string
+        alergias:
+          type: ["string", "null"]
+        antecedentes:
+          type: ["string", "null"]
+        vacunas:
+          type: ["string", "null"]
+        alimentacion:
+          type: ["string", "null"]
+        creadoEn:
+          type: string
+      required:
+        - id
+        - clienteId
+        - nombre
+        - especie
+        - esterilizado
+        - estado
+        - creadoEn
+
+    PacienteListItem:
+      type: object
+      properties:
+        id:
+          type: number
+        nombre:
+          type: string
+        especie:
+          type: string
+        raza:
+          type: ["string", "null"]
+        propietario:
+          type: string
+        clienteId:
+          type: number
+        peso:
+          type: ["number", "null"]
+        estado:
+          type: string
+        creadoEn:
+          type: string
+      required:
+        - id
+        - nombre
+        - especie
+        - propietario
+        - clienteId
+        - estado
+        - creadoEn
+
+    PacienteDetalle:
+      type: object
+      properties:
+        paciente:
+          $ref: "#/components/schemas/Paciente"
+        propietario:
+          type: string
+        propietarioId:
+          type: number
+        consultas:
+          type: array
+          items:
+            $ref: "#/components/schemas/Consulta"
+        recetas:
+          type: array
+          items:
+            $ref: "#/components/schemas/RecetaDetalle"
+        pruebas:
+          type: array
+          items:
+            $ref: "#/components/schemas/Prueba"
+      required:
+        - paciente
+        - propietario
+        - propietarioId
+        - consultas
+        - recetas
+        - pruebas
+
+    PacienteInput:
+      type: object
+      properties:
+        clienteId:
+          type: number
+        nombre:
+          type: string
+          minLength: 1
+        especie:
+          type: string
+          minLength: 1
+        raza:
+          type: string
+        sexo:
+          type: string
+        fechaNacimiento:
+          type: string
+        color:
+          type: string
+        peso:
+          type: number
+        microchip:
+          type: string
+        esterilizado:
+          type: boolean
+        estado:
+          type: string
+        alergias:
+          type: string
+        antecedentes:
+          type: string
+        vacunas:
+          type: string
+        alimentacion:
+          type: string
+      required:
+        - clienteId
+        - nombre
+        - especie
+
+    Consulta:
+      type: object
+      properties:
+        id:
+          type: number
+        pacienteId:
+          type: number
+        fecha:
+          type: string
+        hora:
+          type: ["string", "null"]
+        medico:
+          type: ["string", "null"]
+        motivo:
+          type: string
+        anamnesis:
+          type: ["string", "null"]
+        exploracionFisica:
+          type: ["string", "null"]
+        peso:
+          type: ["number", "null"]
+        temperatura:
+          type: ["number", "null"]
+        frecuenciaCardiaca:
+          type: ["number", "null"]
+        frecuenciaRespiratoria:
+          type: ["number", "null"]
+        mucosas:
+          type: ["string", "null"]
+        trc:
+          type: ["string", "null"]
+        condicionCorporal:
+          type: ["string", "null"]
+        diagnostico:
+          type: ["string", "null"]
+        diagnosticosDiferenciales:
+          type: ["string", "null"]
+        plan:
+          type: ["string", "null"]
+        tratamiento:
+          type: ["string", "null"]
+        pronostico:
+          type: ["string", "null"]
+        proximaCita:
+          type: ["string", "null"]
+        observaciones:
+          type: ["string", "null"]
+        creadoEn:
+          type: string
+      required:
+        - id
+        - pacienteId
+        - fecha
+        - motivo
+        - creadoEn
+
+    ConsultaInput:
+      type: object
+      properties:
+        fecha:
+          type: string
+          minLength: 1
+        hora:
+          type: string
+        medico:
+          type: string
+        motivo:
+          type: string
+          minLength: 1
+        anamnesis:
+          type: string
+        exploracionFisica:
+          type: string
+        peso:
+          type: number
+        temperatura:
+          type: number
+        frecuenciaCardiaca:
+          type: number
+        frecuenciaRespiratoria:
+          type: number
+        mucosas:
+          type: string
+        trc:
+          type: string
+        condicionCorporal:
+          type: string
+        diagnostico:
+          type: string
+        diagnosticosDiferenciales:
+          type: string
+        plan:
+          type: string
+        tratamiento:
+          type: string
+        pronostico:
+          type: string
+        proximaCita:
+          type: string
+        observaciones:
+          type: string
+      required:
+        - fecha
+        - motivo
+
+    RecetaPartida:
+      type: object
+      properties:
+        id:
+          type: number
+        recetaId:
+          type: number
+        medicamento:
+          type: string
+        presentacion:
+          type: ["string", "null"]
+        dosis:
+          type: string
+        via:
+          type: ["string", "null"]
+        frecuencia:
+          type: ["string", "null"]
+        duracion:
+          type: ["string", "null"]
+        instrucciones:
+          type: ["string", "null"]
+      required:
+        - id
+        - recetaId
+        - medicamento
+        - dosis
+
+    RecetaPartidaInput:
+      type: object
+      properties:
+        medicamento:
+          type: string
+          minLength: 1
+        presentacion:
+          type: string
+        dosis:
+          type: string
+          minLength: 1
+        via:
+          type: string
+        frecuencia:
+          type: string
+        duracion:
+          type: string
+        instrucciones:
+          type: string
+      required:
+        - medicamento
+        - dosis
+
+    RecetaDetalle:
+      type: object
+      properties:
+        id:
+          type: number
+        pacienteId:
+          type: number
+        consultaId:
+          type: ["number", "null"]
+        fecha:
+          type: string
+        medico:
+          type: ["string", "null"]
+        indicacionesGenerales:
+          type: ["string", "null"]
+        proximaRevision:
+          type: ["string", "null"]
+        partidas:
+          type: array
+          items:
+            $ref: "#/components/schemas/RecetaPartida"
+        paciente:
+          type: string
+        propietario:
+          type: string
+        especie:
+          type: ["string", "null"]
+        raza:
+          type: ["string", "null"]
+        creadoEn:
+          type: string
+      required:
+        - id
+        - pacienteId
+        - fecha
+        - partidas
+        - paciente
+        - propietario
+        - creadoEn
+
+    RecetaInput:
+      type: object
+      properties:
+        consultaId:
+          type: number
+        fecha:
+          type: string
+          minLength: 1
+        medico:
+          type: string
+        indicacionesGenerales:
+          type: string
+        proximaRevision:
+          type: string
+        partidas:
+          type: array
+          items:
+            $ref: "#/components/schemas/RecetaPartidaInput"
+          minItems: 1
+      required:
+        - fecha
+        - partidas
+
+    Prueba:
+      type: object
+      properties:
+        id:
+          type: number
+        pacienteId:
+          type: number
+        consultaId:
+          type: ["number", "null"]
+        fecha:
+          type: string
+        tipo:
+          type: ["string", "null"]
+        nombre:
+          type: string
+        laboratorio:
+          type: ["string", "null"]
+        resultado:
+          type: ["string", "null"]
+        interpretacion:
+          type: ["string", "null"]
+        costo:
+          type: number
+        creadoEn:
+          type: string
+      required:
+        - id
+        - pacienteId
+        - fecha
+        - nombre
+        - costo
+        - creadoEn
+
+    PruebaInput:
+      type: object
+      properties:
+        consultaId:
+          type: number
+        fecha:
+          type: string
+          minLength: 1
+        tipo:
+          type: string
+        nombre:
+          type: string
+          minLength: 1
+        laboratorio:
+          type: string
+        resultado:
+          type: string
+        interpretacion:
+          type: string
+        costo:
+          type: number
+      required:
+        - fecha
+        - nombre
+
+    Movimiento:
+      type: object
+      properties:
+        id:
+          type: number
+        clienteId:
+          type: number
+        pacienteId:
+          type: ["number", "null"]
+        paciente:
+          type: ["string", "null"]
+        fecha:
+          type: string
+        tipo:
+          type: string
+        concepto:
+          type: string
+        importe:
+          type: number
+        metodoPago:
+          type: ["string", "null"]
+        referencia:
+          type: ["string", "null"]
+        notas:
+          type: ["string", "null"]
+        creadoEn:
+          type: string
+      required:
+        - id
+        - clienteId
+        - fecha
+        - tipo
+        - concepto
+        - importe
+        - creadoEn
+
+    MovimientoInput:
+      type: object
+      properties:
+        pacienteId:
+          type: number
+        fecha:
+          type: string
+          minLength: 1
+        tipo:
+          type: string
+          enum: [Cargo, Pago, Ajuste]
+        concepto:
+          type: string
+          minLength: 1
+        importe:
+          type: number
+          minimum: 0
+        metodoPago:
+          type: string
+        referencia:
+          type: string
+        notas:
+          type: string
+      required:
+        - fecha
+        - tipo
+        - concepto
+        - importe

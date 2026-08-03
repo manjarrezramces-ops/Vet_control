@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "VetControl"
+description = "A full veterinary clinic management system in Spanish. Manages clients (pet owners), patients (pets), consultations, prescriptions, diagnostic tests, and financial movements. Includes a dashboard with clinical stats, searchable client and patient lists, detailed clinical records per patient, and account balance tracking per client."
+version = "1.0.0"
+id = "artifacts/vetcontrol"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 22375
+
+[services.development]
+run = "pnpm --filter @workspace/vetcontrol run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/vetcontrol", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/vetcontrol/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "22375"
+BASE_PATH = "/"
