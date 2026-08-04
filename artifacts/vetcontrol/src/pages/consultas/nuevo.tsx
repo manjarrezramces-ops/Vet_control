@@ -119,7 +119,7 @@ export default function ConsultaNueva() {
         linfonodos: values.ln || undefined,
         deshidratacion: values.dh || undefined,
         ruidosTransito: values.rt || undefined,
-        condicionPulso: values.cp || undefined,
+        camposPulmonares: values.cp || undefined,
         ruidosDorsales: values.rd || undefined,
         palmopercusion: values.pp || undefined,
         palpacionAbdominal: values.pa || undefined,
