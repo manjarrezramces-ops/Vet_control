@@ -25,6 +25,8 @@ const formSchema = z.object({
   hora: z.string().optional(),
   medico: z.string().optional(),
   motivo: z.string().min(1, "El motivo es obligatorio"),
+  peso: z.coerce.number().optional().or(z.literal("")),
+temperatura: z.coerce.number().optional().or(z.literal("")),
   // EFG
   cc: z.string().optional(),
   mm: z.string().optional(),
@@ -81,6 +83,7 @@ export default function ConsultaNueva() {
       hora: format(new Date(), "HH:mm"),
       medico: "",
       motivo: "",
+      peso: "",temperatura: "",
       cc: "", em: "", mm: "", tllc: "", ln: "",
       fc: "",p: "",dh: "", fr: "", rt: "", cp: "", rd: "", pp: "", pa: "", 
       anamnesis: "",
@@ -109,6 +112,8 @@ export default function ConsultaNueva() {
         hora: values.hora || undefined,
         medico: values.medico || undefined,
         motivo: values.motivo,
+        peso: values.peso === "" || Number.isNaN(Number(values.peso))? undefined: Number(values.peso),
+temperatura:values.temperatura === "" ||Number.isNaN(Number(values.temperatura)) ? undefined: Number(values.temperatura),
         frecuenciaCardiaca: (values.fc === "" || isNaN(Number(values.fc))) ? undefined : Number(values.fc),
         pulso: values.p || undefined,
         frecuenciaRespiratoria: (values.fr === "" || isNaN(Number(values.fr))) ? undefined : Number(values.fr),
@@ -243,6 +248,51 @@ export default function ConsultaNueva() {
                   </h3>
                 </div>
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                  {/* Peso */}
+<FormField
+  control={form.control}
+  name="peso"
+  render={({ field }) => (
+    <FormItem>
+      <FormLabel className="font-bold text-muted-foreground tracking-wider">
+        PESO
+      </FormLabel>
+      <FormControl>
+        <Input
+          className="h-11 text-base font-mono"
+          type="number"
+          step="0.01"
+          placeholder="kg"
+          {...field}
+        />
+      </FormControl>
+      <FormMessage />
+    </FormItem>
+  )}
+/>
+
+{/* Temperatura */}
+<FormField
+  control={form.control}
+  name="temperatura"
+  render={({ field }) => (
+    <FormItem>
+      <FormLabel className="font-bold text-muted-foreground tracking-wider">
+        TEMP.
+      </FormLabel>
+      <FormControl>
+        <Input
+          className="h-11 text-base font-mono"
+          type="number"
+          step="0.1"
+          placeholder="°C"
+          {...field}
+        />
+      </FormControl>
+      <FormMessage />
+    </FormItem>
+  )}
+/>
                   {/* CC */}
                   <FormField control={form.control} name="cc" render={({ field }) => (
                     <FormItem>
