@@ -219,7 +219,7 @@ export const CreateMovimientoResponse = zod.object({
   "fecha": zod.string(),
   "tipo": zod.string(),
   "concepto": zod.string(),
-    "importe": zod.number(),
+  "importe": zod.number(),
   "metodoPago": zod.string().nullish(),
   "referencia": zod.string().nullish(),
   "notas": zod.string().nullish(),
@@ -255,9 +255,7 @@ export const GetPacientesResponseItem = zod.object({
   "creadoEn": zod.string()
 });
 
-export const GetPacientesResponse = zod.array(
-  GetPacientesResponseItem
-);
+export const GetPacientesResponse = zod.array(GetPacientesResponseItem);
 
 /**
  * @summary Create a new patient
@@ -334,95 +332,83 @@ export const GetPacienteResponse = zod.object({
   "propietario": zod.string(),
   "propietarioId": zod.number(),
 
-  "consultas": zod.array(
-    zod.object({
+  "consultas": zod.array(zod.object({
+    "id": zod.number(),
+    "pacienteId": zod.number(),
+    "fecha": zod.string(),
+    "hora": zod.string().nullish(),
+    "medico": zod.string().nullish(),
+    "motivo": zod.string(),
+    "anamnesis": zod.string().nullish(),
+    "exploracionFisica": zod.string().nullish(),
+    "peso": zod.number().nullish(),
+    "temperatura": zod.number().nullish(),
+    "frecuenciaCardiaca": zod.number().nullish(),
+    "pulso": zod.string().nullish(),
+    "frecuenciaRespiratoria": zod.number().nullish(),
+    "mucosas": zod.string().nullish(),
+    "trc": zod.string().nullish(),
+    "condicionCorporal": zod.string().nullish(),
+    "estadoMental": zod.string().nullish(),
+    "linfonodos": zod.string().nullish(),
+    "deshidratacion": zod.string().nullish(),
+    "ruidosTransito": zod.string().nullish(),
+    "condicionPulso": zod.string().nullish(),
+    "ruidosDorsales": zod.string().nullish(),
+    "pp": zod.string().nullish(),
+    "presionArterial": zod.string().nullish(),
+    "camposPulmonares": zod.string().nullish(),
+    "palmopercusion": zod.string().nullish(),
+    "palpacionAbdominal": zod.string().nullish(),
+    "diagnostico": zod.string().nullish(),
+    "diagnosticosDiferenciales": zod.string().nullish(),
+    "plan": zod.string().nullish(),
+    "tratamiento": zod.string().nullish(),
+    "pronostico": zod.string().nullish(),
+    "proximaCita": zod.string().nullish(),
+    "observaciones": zod.string().nullish(),
+    "creadoEn": zod.string()
+  })),
+
+  "recetas": zod.array(zod.object({
+    "id": zod.number(),
+    "pacienteId": zod.number(),
+    "consultaId": zod.number().nullish(),
+    "fecha": zod.string(),
+    "medico": zod.string().nullish(),
+    "indicacionesGenerales": zod.string().nullish(),
+    "proximaRevision": zod.string().nullish(),
+    "partidas": zod.array(zod.object({
       "id": zod.number(),
-      "pacienteId": zod.number(),
-      "fecha": zod.string(),
-      "hora": zod.string().nullish(),
-      "medico": zod.string().nullish(),
-      "motivo": zod.string(),
-      "anamnesis": zod.string().nullish(),
-      "exploracionFisica": zod.string().nullish(),
-      "peso": zod.number().nullish(),
-      "temperatura": zod.number().nullish(),
-      "frecuenciaCardiaca": zod.number().nullish(),
-      "pulso": zod.string().nullish(),
-      "frecuenciaRespiratoria": zod.number().nullish(),
-      "mucosas": zod.string().nullish(),
-      "trc": zod.string().nullish(),
-      "condicionCorporal": zod.string().nullish(),
-      "estadoMental": zod.string().nullish(),
-      "linfonodos": zod.string().nullish(),
-      "deshidratacion": zod.string().nullish(),
-      "ruidosTransito": zod.string().nullish(),
-      "condicionPulso": zod.string().nullish(),
-      "ruidosDorsales": zod.string().nullish(),
-      "pp": zod.string().nullish(),
-      "presionArterial": zod.string().nullish(),
+      "recetaId": zod.number(),
+      "medicamento": zod.string(),
+      "presentacion": zod.string().nullish(),
+      "dosis": zod.string(),
+      "via": zod.string().nullish(),
+      "frecuencia": zod.string().nullish(),
+      "duracion": zod.string().nullish(),
+      "instrucciones": zod.string().nullish()
+    })),
+    "paciente": zod.string(),
+    "propietario": zod.string(),
+    "especie": zod.string().nullish(),
+    "raza": zod.string().nullish(),
+    "creadoEn": zod.string()
+  })),
 
-      "camposPulmonares": zod.string().nullish(),
-      "palmopercusion": zod.string().nullish(),
-      "palpacionAbdominal": zod.string().nullish(),
-
-      "diagnostico": zod.string().nullish(),
-      "diagnosticosDiferenciales": zod.string().nullish(),
-      "plan": zod.string().nullish(),
-      "tratamiento": zod.string().nullish(),
-      "pronostico": zod.string().nullish(),
-      "proximaCita": zod.string().nullish(),
-      "observaciones": zod.string().nullish(),
-      "creadoEn": zod.string()
-    })
-  ),
-
-  "recetas": zod.array(
-    zod.object({
-      "id": zod.number(),
-      "pacienteId": zod.number(),
-      "consultaId": zod.number().nullish(),
-      "fecha": zod.string(),
-      "medico": zod.string().nullish(),
-      "indicacionesGenerales": zod.string().nullish(),
-      "proximaRevision": zod.string().nullish(),
-
-      "partidas": zod.array(
-        zod.object({
-          "id": zod.number(),
-          "recetaId": zod.number(),
-          "medicamento": zod.string(),
-          "presentacion": zod.string().nullish(),
-          "dosis": zod.string(),
-          "via": zod.string().nullish(),
-          "frecuencia": zod.string().nullish(),
-          "duracion": zod.string().nullish(),
-          "instrucciones": zod.string().nullish()
-        })
-      ),
-
-      "paciente": zod.string(),
-      "propietario": zod.string(),
-      "especie": zod.string().nullish(),
-      "raza": zod.string().nullish(),
-      "creadoEn": zod.string()
-    })
-  ),
-
-  "pruebas": zod.array(
-    zod.object({
-      "id": zod.number(),
-      "pacienteId": zod.number(),
-      "consultaId": zod.number().nullish(),
-      "fecha": zod.string(),
-      "tipo": zod.string().nullish(),
-      "nombre": zod.string(),
-      "laboratorio": zod.string().nullish(),
-      "resultado": zod.string().nullish(),
-      "interpretacion": zod.string().nullish(),
-      "costo": zod.number(),
-      "creadoEn": zod.string()
-    })
-  )
+  "pruebas": zod.array(zod.object({
+    "id": zod.number(),
+    "pacienteId": zod.number(),
+    "consultaId": zod.number().nullish(),
+    "fecha": zod.string(),
+    "tipo": zod.string().nullish(),
+    "nombre": zod.string(),
+    "laboratorio": zod.string().nullish(),
+    "resultado": zod.string().nullish(),
+    "interpretacion": zod.string().nullish(),
+    "costo": zod.number(),
+    "creadoEn": zod.string()
+  }))
 });
 
 /**
@@ -433,23 +419,6 @@ export const UpdatePacienteParams = zod.object({
 });
 
 export const UpdatePacienteBody = zod.object({
-  "clienteId": zod.number(),
-  "nombre": zod.string().min(1),
-  "apellido": zod.string().optional(),
-  "especie": zod.string().min(1),
-  "raza": zod.string().optional(),
-  "sexo": zod.string().optional(),
-  "fechaNacimiento": zod.string().optional(),
-  "color": zod.string().optional(),
-  "peso": zod.number().optional(),
-  "microchip": zod.string().optional(),
-  "esterilizado": zod.boolean().optional(),
-  "estado": zod.string().optional(),
-  "alergias": zod.string().optional(),
-  "antecedentes": zod.string().optional(),
-  "vacunas": zod.string().optional(),
-  "alimentacion": zod.string().optional()
-});
   "clienteId": zod.number(),
   "nombre": zod.string().min(1),
   "apellido": zod.string().optional(),
@@ -497,7 +466,6 @@ export const DeletePacienteParams = zod.object({
 });
 
 export const DeletePacienteResponse = zod.void();
-
 /**
  * @summary Create a consultation for a patient
  */
@@ -664,6 +632,7 @@ export const UpdateConsultaBody = zod.object({
   "proximaCita": zod.string().optional(),
   "observaciones": zod.string().optional()
 });
+
 export const UpdateConsultaResponse = zod.object({
   "id": zod.number(),
   "pacienteId": zod.number(),
@@ -689,11 +658,9 @@ export const UpdateConsultaResponse = zod.object({
   "ruidosDorsales": zod.string().nullish(),
   "pp": zod.string().nullish(),
   "presionArterial": zod.string().nullish(),
-
   "camposPulmonares": zod.string().nullish(),
   "palmopercusion": zod.string().nullish(),
   "palpacionAbdominal": zod.string().nullish(),
-
   "diagnostico": zod.string().nullish(),
   "diagnosticosDiferenciales": zod.string().nullish(),
   "plan": zod.string().nullish(),
@@ -726,18 +693,15 @@ export const CreateRecetaBody = zod.object({
   "medico": zod.string().optional(),
   "indicacionesGenerales": zod.string().optional(),
   "proximaRevision": zod.string().optional(),
-
-  "partidas": zod.array(
-    zod.object({
-      "medicamento": zod.string().min(1),
-      "presentacion": zod.string().optional(),
-      "dosis": zod.string().min(1),
-      "via": zod.string().optional(),
-      "frecuencia": zod.string().optional(),
-      "duracion": zod.string().optional(),
-      "instrucciones": zod.string().optional()
-    })
-  ).min(1)
+  "partidas": zod.array(zod.object({
+    "medicamento": zod.string().min(1),
+    "presentacion": zod.string().optional(),
+    "dosis": zod.string().min(1),
+    "via": zod.string().optional(),
+    "frecuencia": zod.string().optional(),
+    "duracion": zod.string().optional(),
+    "instrucciones": zod.string().optional()
+  })).min(1)
 });
 
 export const CreateRecetaResponse = zod.object({
@@ -748,21 +712,17 @@ export const CreateRecetaResponse = zod.object({
   "medico": zod.string().nullish(),
   "indicacionesGenerales": zod.string().nullish(),
   "proximaRevision": zod.string().nullish(),
-
-  "partidas": zod.array(
-    zod.object({
-      "id": zod.number(),
-      "recetaId": zod.number(),
-      "medicamento": zod.string(),
-      "presentacion": zod.string().nullish(),
-      "dosis": zod.string(),
-      "via": zod.string().nullish(),
-      "frecuencia": zod.string().nullish(),
-      "duracion": zod.string().nullish(),
-      "instrucciones": zod.string().nullish()
-    })
-  ),
-
+  "partidas": zod.array(zod.object({
+    "id": zod.number(),
+    "recetaId": zod.number(),
+    "medicamento": zod.string(),
+    "presentacion": zod.string().nullish(),
+    "dosis": zod.string(),
+    "via": zod.string().nullish(),
+    "frecuencia": zod.string().nullish(),
+    "duracion": zod.string().nullish(),
+    "instrucciones": zod.string().nullish()
+  })),
   "paciente": zod.string(),
   "propietario": zod.string(),
   "especie": zod.string().nullish(),
@@ -785,21 +745,17 @@ export const GetRecetaResponse = zod.object({
   "medico": zod.string().nullish(),
   "indicacionesGenerales": zod.string().nullish(),
   "proximaRevision": zod.string().nullish(),
-
-  "partidas": zod.array(
-    zod.object({
-      "id": zod.number(),
-      "recetaId": zod.number(),
-      "medicamento": zod.string(),
-      "presentacion": zod.string().nullish(),
-      "dosis": zod.string(),
-      "via": zod.string().nullish(),
-      "frecuencia": zod.string().nullish(),
-      "duracion": zod.string().nullish(),
-      "instrucciones": zod.string().nullish()
-    })
-  ),
-
+  "partidas": zod.array(zod.object({
+    "id": zod.number(),
+    "recetaId": zod.number(),
+    "medicamento": zod.string(),
+    "presentacion": zod.string().nullish(),
+    "dosis": zod.string(),
+    "via": zod.string().nullish(),
+    "frecuencia": zod.string().nullish(),
+    "duracion": zod.string().nullish(),
+    "instrucciones": zod.string().nullish()
+  })),
   "paciente": zod.string(),
   "propietario": zod.string(),
   "especie": zod.string().nullish(),
