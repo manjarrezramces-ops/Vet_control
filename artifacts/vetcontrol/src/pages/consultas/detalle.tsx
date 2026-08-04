@@ -268,38 +268,91 @@ export default function ConsultaDetalle() {
             <h4 className="text-sm font-bold text-foreground flex items-center gap-2 mb-6 uppercase tracking-wider">
               <Activity className="h-4 w-4 text-primary" /> Constantes fisiológicas
             </h4>
-            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-4">
-              <div className="bg-muted/30 p-4 rounded-xl border border-border/50 flex flex-col items-center justify-center text-center h-24">
-                <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-1.5">Peso</div>
-                <div className="font-bold text-lg text-foreground font-mono">{consulta.peso ? `${consulta.peso} kg` : <span className="text-muted-foreground/40 font-sans">-</span>}</div>
-              </div>
-              <div className="bg-muted/30 p-4 rounded-xl border border-border/50 flex flex-col items-center justify-center text-center h-24">
-                <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-1.5">Temp.</div>
-                <div className="font-bold text-lg text-foreground font-mono">{consulta.temperatura ? `${consulta.temperatura} °C` : <span className="text-muted-foreground/40 font-sans">-</span>}</div>
-              </div>
-              <div className="bg-muted/30 p-4 rounded-xl border border-border/50 flex flex-col items-center justify-center text-center h-24">
-                <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-1.5">Freq. Card.</div>
-                <div className="font-bold text-lg text-foreground font-mono">{consulta.frecuenciaCardiaca ? `${consulta.frecuenciaCardiaca} lpm` : <span className="text-muted-foreground/40 font-sans">-</span>}</div>
-              </div>
-              <div className="bg-muted/30 p-4 rounded-xl border border-border/50 flex flex-col items-center justify-center text-center h-24">
-                <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-1.5">Freq. Resp.</div>
-                <div className="font-bold text-lg text-foreground font-mono">{consulta.frecuenciaRespiratoria ? `${consulta.frecuenciaRespiratoria} rpm` : <span className="text-muted-foreground/40 font-sans">-</span>}</div>
-              </div>
-              <div className="bg-muted/30 p-4 rounded-xl border border-border/50 flex flex-col items-center justify-center text-center h-24">
-                <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-1.5">Mucosas</div>
-                <div className="font-bold text-sm text-foreground line-clamp-2 leading-tight">{consulta.mucosas || <span className="text-muted-foreground/40 font-sans">-</span>}</div>
-              </div>
-              <div className="bg-muted/30 p-4 rounded-xl border border-border/50 flex flex-col items-center justify-center text-center h-24">
-                <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-1.5">TRC</div>
-                <div className="font-bold text-lg text-foreground font-mono">{consulta.trc ? `${consulta.trc} s` : <span className="text-muted-foreground/40 font-sans">-</span>}</div>
-              </div>
-              <div className="bg-muted/30 p-4 rounded-xl border border-border/50 flex flex-col items-center justify-center text-center h-24">
-                <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-1.5">Cond. Corp.</div>
-                <div className="font-bold text-base text-foreground font-mono">{consulta.condicionCorporal || <span className="text-muted-foreground/40 font-sans">-</span>}</div>
-              </div>
-            </div>
-          </div>
+           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+  {[
+    {
+      label: "CC",
+      value: consulta.condicionCorporal,
+    },
+    {
+      label: "MM",
+      value: consulta.mucosas,
+    },
+    {
+      label: "E.M.",
+      value: consulta.estadoMental,
+    },
+    {
+      label: "TLLC",
+      value: consulta.trc,
+    },
+    {
+      label: "LN",
+      value: consulta.linfonodos,
+    },
+    {
+      label: "FC",
+      value:
+        consulta.frecuenciaCardiaca != null
+          ? `${consulta.frecuenciaCardiaca} lpm`
+          : null,
+    },
+    {
+      label: "P",
+      value: consulta.pulso,
+    },
+    {
+      label: "%DH",
+      value: consulta.deshidratacion,
+    },
+    {
+      label: "FR",
+      value:
+        consulta.frecuenciaRespiratoria != null
+          ? `${consulta.frecuenciaRespiratoria} rpm`
+          : null,
+    },
+    {
+      label: "RT",
+      value: consulta.ruidosTransito,
+    },
+    {
+      label: "CP",
+      value: consulta.camposPulmonares,
+    },
+    {
+      label: "RD",
+      value: consulta.ruidosDorsales,
+    },
+    {
+      label: "PP",
+      value: consulta.palmopercusion,
+    },
+    {
+      label: "PA",
+      value: consulta.palpacionAbdominal,
+    },
+  ].map((parametro) => (
+    <div
+      key={parametro.label}
+      className="bg-muted/30 p-4 rounded-xl border border-border/50 flex flex-col items-center justify-center text-center min-h-24"
+    >
+      <div className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest mb-2">
+        {parametro.label}
+      </div>
 
+      <div className="font-bold text-base text-foreground whitespace-pre-wrap break-words">
+        {parametro.value !== null &&
+        parametro.value !== undefined &&
+        parametro.value !== "" ? (
+          parametro.value
+        ) : (
+          <span className="text-muted-foreground/40 font-sans">—</span>
+        )}
+      </div>
+    </div>
+  ))}
+</div>
           <Separator />
 
           <div className="p-8 space-y-8">
