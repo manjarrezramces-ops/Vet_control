@@ -90,26 +90,28 @@ router.get("/clientes/:clienteId", async (req, res): Promise<void> => {
   const [cliente] = await db.select().from(clientesTable).where(eq(clientesTable.id, clienteId));
   if (!cliente) { res.status(404).json({ error: "Cliente no encontrado" }); return; }
 
-const [saldoRow] = await db.select({
-  saldo: sql<string>`
-    COALESCE(
-      (
-        SELECT SUM(
+const saldoRows = await db
+  .select({
+    saldo: sql<string>`
+      COALESCE(
+        SUM(
           CASE
-            WHEN liquidado = true THEN 0
+            WHEN ${cuentasClienteTable.liquidado} = true THEN 0
             ELSE GREATEST(
-              monto::numeric - COALESCE(monto_pagado::numeric, 0),
+              ${cuentasClienteTable.monto}::numeric -
+              COALESCE(${cuentasClienteTable.montoPagado}::numeric, 0),
               0
             )
           END
-        )
-        FROM cuentas_cliente
-        WHERE cliente_id = ${clienteId}
-      ),
-      0
-    )
-  `,
-});
+        ),
+        0
+      )
+    `,
+  })
+  .from(cuentasClienteTable)
+  .where(eq(cuentasClienteTable.clienteId, clienteId));
+
+const saldoRow = saldoRows[0];
 
   const pacientes = await db
     .select({
@@ -149,7 +151,7 @@ const [saldoRow] = await db.select({
 
   const payload = {
     cliente: { ...cliente, creadoEn: cliente.creadoEn.toISOString(), adeudoMonto: cliente.adeudoMonto != null ? Number(cliente.adeudoMonto) : null, adeudoLiquidadoEn: cliente.adeudoLiquidadoEn?.toISOString() ?? null },
-    saldo: parseFloat(saldoRow.saldo as string),
+    saldo: Number(saldoRow?.saldo ?? 0),
     pacientes: pacientes.map((p) => ({
       ...p,
       propietario: p.propietario.trim(),
