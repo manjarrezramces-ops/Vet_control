@@ -15,6 +15,7 @@ export const consultasTable = pgTable("consultas", {
   peso: numeric("peso", { precision: 6, scale: 2 }),
   temperatura: numeric("temperatura", { precision: 5, scale: 1 }),
   frecuenciaCardiaca: integer("frecuencia_cardiaca"),
+  pulso: text("pulso") 
   frecuenciaRespiratoria: integer("frecuencia_respiratoria"),
   mucosas: text("mucosas"),
   trc: text("trc"),
