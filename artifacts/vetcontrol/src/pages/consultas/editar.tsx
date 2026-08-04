@@ -38,19 +38,33 @@ const formSchema = z.object({
   medico: z.string().optional(),
   motivo: z.string().min(1, "El motivo es obligatorio"),
 
-  cc: z.string().optional(),
-  mm: z.string().optional(),
-  em: z.string().optional(),
-  tllc: z.string().optional(),
-  ln: z.string().optional(),
-  fc: z.coerce.number().optional().or(z.literal("")),
-  p: z.string().optional(),
-  dh: z.string().optional(),
-  fr: z.coerce.number().optional().or(z.literal("")),
-  rt: z.string().optional(),
-  cp: z.string().optional(),
-  pp: z.string().optional(),
-  pa: z.string().optional(),
+  peso: z.coerce.number().optional().or(z.literal("")),
+  temperatura: z.coerce.number().optional().or(z.literal("")),
+
+  condicionCorporal: z.string().optional(),
+  mucosas: z.string().optional(),
+  estadoMental: z.string().optional(),
+  trc: z.string().optional(),
+  linfonodos: z.string().optional(),
+
+  frecuenciaCardiaca: z.coerce
+    .number()
+    .optional()
+    .or(z.literal("")),
+
+  pulso: z.string().optional(),
+  deshidratacion: z.string().optional(),
+
+  frecuenciaRespiratoria: z.coerce
+    .number()
+    .optional()
+    .or(z.literal("")),
+
+  ruidosTransito: z.string().optional(),
+  camposPulmonares: z.string().optional(),
+  ruidosDorsales: z.string().optional(),
+  palmopercusion: z.string().optional(),
+  palpacionAbdominal: z.string().optional(),
 
   anamnesis: z.string().optional(),
   exploracionFisica: z.string().optional(),
@@ -65,16 +79,25 @@ const formSchema = z.object({
 
 type FormValues = z.infer<typeof formSchema>;
 
+function numberOrUndefined(value: number | "") {
+  if (value === "" || Number.isNaN(Number(value))) {
+    return undefined;
+  }
+
+  return Number(value);
+}
+
 export default function ConsultaEditar() {
   const params = useParams();
   const id = Number(params.id);
+
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const { data: consulta, isLoading } = useGetConsulta(id, {
+  const { data: consulta, isLoading, isError } = useGetConsulta(id, {
     query: {
-      enabled: !!id,
+      enabled: Boolean(id),
       queryKey: getGetConsultaQueryKey(id),
     },
   });
@@ -89,19 +112,23 @@ export default function ConsultaEditar() {
       medico: "",
       motivo: "",
 
-      cc: "",
-      mm: "",
-      em: "",
-      tllc: "",
-      ln: "",
-      fc: "",
-      p: "",
-      dh: "",
-      fr: "",
-      rt: "",
-      cp: "",
-      pp: "",
-      pa: "",
+      peso: "",
+      temperatura: "",
+
+      condicionCorporal: "",
+      mucosas: "",
+      estadoMental: "",
+      trc: "",
+      linfonodos: "",
+      frecuenciaCardiaca: "",
+      pulso: "",
+      deshidratacion: "",
+      frecuenciaRespiratoria: "",
+      ruidosTransito: "",
+      camposPulmonares: "",
+      ruidosDorsales: "",
+      palmopercusion: "",
+      palpacionAbdominal: "",
 
       anamnesis: "",
       exploracionFisica: "",
@@ -118,43 +145,52 @@ export default function ConsultaEditar() {
   const initializedForId = useRef<number | null>(null);
 
   useEffect(() => {
-    if (consulta && initializedForId.current !== id) {
-      initializedForId.current = id;
-
-      form.reset({
-        fecha: consulta.fecha.split("T")[0],
-        hora: consulta.hora || "",
-        medico: consulta.medico || "",
-        motivo: consulta.motivo,
-
-        cc: consulta.condicionCorporal || "",
-        mm: consulta.mucosas || "",
-        em: consulta.estadoMental || "",
-        tllc: consulta.trc || "",
-        ln: consulta.linfonodos || "",
-        fc: consulta.frecuenciaCardiaca ?? "",
-        p: consulta.pulso || "",
-        dh: consulta.deshidratacion || "",
-        fr: consulta.frecuenciaRespiratoria ?? "",
-        rt: consulta.ruidosTransito || "",
-        cp: consulta.ruidosDorsales || "",
-        pp: consulta.pp || "",
-        pa: consulta.presionArterial || "",
-
-        anamnesis: consulta.anamnesis || "",
-        exploracionFisica: consulta.exploracionFisica || "",
-        diagnosticosDiferenciales:
-          consulta.diagnosticosDiferenciales || "",
-        diagnostico: consulta.diagnostico || "",
-        plan: consulta.plan || "",
-        tratamiento: consulta.tratamiento || "",
-        pronostico: consulta.pronostico || "",
-        proximaCita: consulta.proximaCita
-          ? consulta.proximaCita.split("T")[0]
-          : "",
-        observaciones: consulta.observaciones || "",
-      });
+    if (!consulta || initializedForId.current === id) {
+      return;
     }
+
+    initializedForId.current = id;
+
+    form.reset({
+      fecha: consulta.fecha.split("T")[0],
+      hora: consulta.hora ?? "",
+      medico: consulta.medico ?? "",
+      motivo: consulta.motivo,
+
+      peso: consulta.peso ?? "",
+      temperatura: consulta.temperatura ?? "",
+
+      condicionCorporal: consulta.condicionCorporal ?? "",
+      mucosas: consulta.mucosas ?? "",
+      estadoMental: consulta.estadoMental ?? "",
+      trc: consulta.trc ?? "",
+      linfonodos: consulta.linfonodos ?? "",
+      frecuenciaCardiaca:
+        consulta.frecuenciaCardiaca ?? "",
+      pulso: consulta.pulso ?? "",
+      deshidratacion: consulta.deshidratacion ?? "",
+      frecuenciaRespiratoria:
+        consulta.frecuenciaRespiratoria ?? "",
+      ruidosTransito: consulta.ruidosTransito ?? "",
+      camposPulmonares: consulta.camposPulmonares ?? "",
+      ruidosDorsales: consulta.ruidosDorsales ?? "",
+      palmopercusion: consulta.palmopercusion ?? "",
+      palpacionAbdominal:
+        consulta.palpacionAbdominal ?? "",
+
+      anamnesis: consulta.anamnesis ?? "",
+      exploracionFisica: consulta.exploracionFisica ?? "",
+      diagnosticosDiferenciales:
+        consulta.diagnosticosDiferenciales ?? "",
+      diagnostico: consulta.diagnostico ?? "",
+      plan: consulta.plan ?? "",
+      tratamiento: consulta.tratamiento ?? "",
+      pronostico: consulta.pronostico ?? "",
+      proximaCita: consulta.proximaCita
+        ? consulta.proximaCita.split("T")[0]
+        : "",
+      observaciones: consulta.observaciones ?? "",
+    });
   }, [consulta, id, form]);
 
   function onSubmit(values: FormValues) {
@@ -164,28 +200,42 @@ export default function ConsultaEditar() {
       medico: values.medico || undefined,
       motivo: values.motivo,
 
-      condicionCorporal: values.cc || undefined,
-      mucosas: values.mm || undefined,
-      estadoMental: values.em || undefined,
-      trc: values.tllc || undefined,
-      linfonodos: values.ln || undefined,
-      frecuenciaCardiaca:
-        values.fc === "" || isNaN(Number(values.fc))
-          ? undefined
-          : Number(values.fc),
-      pulso: values.p || undefined,
-      deshidratacion: values.dh || undefined,
-      frecuenciaRespiratoria:
-        values.fr === "" || isNaN(Number(values.fr))
-          ? undefined
-          : Number(values.fr),
-      ruidosTransito: values.rt || undefined,
-      ruidosDorsales: values.cp || undefined,
-      pp: values.pp || undefined,
-      presionArterial: values.pa || undefined,
+      peso: numberOrUndefined(values.peso),
+      temperatura: numberOrUndefined(values.temperatura),
+
+      condicionCorporal:
+        values.condicionCorporal || undefined,
+      mucosas: values.mucosas || undefined,
+      estadoMental: values.estadoMental || undefined,
+      trc: values.trc || undefined,
+      linfonodos: values.linfonodos || undefined,
+
+      frecuenciaCardiaca: numberOrUndefined(
+        values.frecuenciaCardiaca,
+      ),
+
+      pulso: values.pulso || undefined,
+      deshidratacion:
+        values.deshidratacion || undefined,
+
+      frecuenciaRespiratoria: numberOrUndefined(
+        values.frecuenciaRespiratoria,
+      ),
+
+      ruidosTransito:
+        values.ruidosTransito || undefined,
+      camposPulmonares:
+        values.camposPulmonares || undefined,
+      ruidosDorsales:
+        values.ruidosDorsales || undefined,
+      palmopercusion:
+        values.palmopercusion || undefined,
+      palpacionAbdominal:
+        values.palpacionAbdominal || undefined,
 
       anamnesis: values.anamnesis || undefined,
-      exploracionFisica: values.exploracionFisica || undefined,
+      exploracionFisica:
+        values.exploracionFisica || undefined,
       diagnosticosDiferenciales:
         values.diagnosticosDiferenciales || undefined,
       diagnostico: values.diagnostico || undefined,
@@ -203,24 +253,29 @@ export default function ConsultaEditar() {
       },
       {
         onSuccess: () => {
-          toast({
-            title: "Cambios guardados",
-            description:
-              "La consulta ha sido actualizada correctamente.",
-          });
-
           queryClient.invalidateQueries({
             queryKey: getGetConsultaQueryKey(id),
           });
 
+          toast({
+            title: "Cambios guardados",
+            description:
+              "La consulta fue actualizada correctamente.",
+          });
+
           setLocation(`/consultas/${id}`);
         },
-        onError: () => {
+        onError: (error) => {
+          console.error(
+            "Error al actualizar la consulta:",
+            error,
+          );
+
           toast({
             variant: "destructive",
-            title: "Error",
+            title: "Error al guardar",
             description:
-              "No se pudieron guardar los cambios. Intenta de nuevo.",
+              "No se pudieron actualizar los datos.",
           });
         },
       },
@@ -231,7 +286,15 @@ export default function ConsultaEditar() {
     return (
       <div className="space-y-8 max-w-4xl mx-auto">
         <Skeleton className="h-16 w-3/4" />
-        <Skeleton className="h-[800px] rounded-xl" />
+        <Skeleton className="h-[900px] rounded-xl" />
+      </div>
+    );
+  }
+
+  if (isError || !consulta) {
+    return (
+      <div className="text-destructive font-bold text-lg text-center py-20">
+        No se pudo cargar la consulta.
       </div>
     );
   }
@@ -253,8 +316,9 @@ export default function ConsultaEditar() {
           <h1 className="text-4xl font-bold tracking-tight text-foreground">
             Editar consulta
           </h1>
+
           <p className="text-lg text-muted-foreground mt-1 font-medium">
-            Actualiza los datos de la consulta médica.
+            Actualiza todos los datos de la consulta médica.
           </p>
         </div>
       </div>
@@ -281,9 +345,9 @@ export default function ConsultaEditar() {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel className="text-base font-semibold">
-                          Fecha{" "}
-                          <span className="text-destructive">*</span>
+                          Fecha
                         </FormLabel>
+
                         <FormControl>
                           <Input
                             className="h-12 text-base"
@@ -291,6 +355,7 @@ export default function ConsultaEditar() {
                             {...field}
                           />
                         </FormControl>
+
                         <FormMessage />
                       </FormItem>
                     )}
@@ -304,6 +369,7 @@ export default function ConsultaEditar() {
                         <FormLabel className="text-base font-semibold">
                           Hora
                         </FormLabel>
+
                         <FormControl>
                           <Input
                             className="h-12 text-base"
@@ -311,6 +377,7 @@ export default function ConsultaEditar() {
                             {...field}
                           />
                         </FormControl>
+
                         <FormMessage />
                       </FormItem>
                     )}
@@ -324,6 +391,7 @@ export default function ConsultaEditar() {
                         <FormLabel className="text-base font-semibold">
                           Médico
                         </FormLabel>
+
                         <FormControl>
                           <Input
                             className="h-12 text-base"
@@ -331,6 +399,7 @@ export default function ConsultaEditar() {
                             {...field}
                           />
                         </FormControl>
+
                         <FormMessage />
                       </FormItem>
                     )}
@@ -342,16 +411,16 @@ export default function ConsultaEditar() {
                     render={({ field }) => (
                       <FormItem className="md:col-span-3 bg-muted/20 p-5 rounded-xl border border-border/50">
                         <FormLabel className="text-base font-bold text-primary">
-                          Motivo de consulta{" "}
-                          <span className="text-destructive">*</span>
+                          Motivo de consulta
                         </FormLabel>
+
                         <FormControl>
                           <Input
                             className="h-14 text-lg bg-white mt-2 border-primary/20 shadow-sm"
-                            placeholder="Ej. Revisión anual, vómito, vacunas..."
                             {...field}
                           />
                         </FormControl>
+
                         <FormMessage />
                       </FormItem>
                     )}
@@ -367,19 +436,21 @@ export default function ConsultaEditar() {
                   </h3>
                 </div>
 
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <FormField
                     control={form.control}
-                    name="cc"
+                    name="peso"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="font-bold text-muted-foreground tracking-wider">
-                          CC
+                        <FormLabel className="font-bold text-muted-foreground">
+                          Peso
                         </FormLabel>
+
                         <FormControl>
                           <Input
-                            className="h-11 text-base font-mono"
-                            placeholder="3/5"
+                            type="number"
+                            step="0.01"
+                            placeholder="kg"
                             {...field}
                           />
                         </FormControl>
@@ -389,15 +460,52 @@ export default function ConsultaEditar() {
 
                   <FormField
                     control={form.control}
-                    name="mm"
+                    name="temperatura"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="font-bold text-muted-foreground tracking-wider">
-                          MM
+                        <FormLabel className="font-bold text-muted-foreground">
+                          Temperatura
                         </FormLabel>
+
                         <FormControl>
                           <Input
-                            className="h-11 text-base"
+                            type="number"
+                            step="0.1"
+                            placeholder="°C"
+                            {...field}
+                          />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="condicionCorporal"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="font-bold text-muted-foreground">
+                          CC
+                        </FormLabel>
+
+                        <FormControl>
+                          <Input placeholder="3/5" {...field} />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="mucosas"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="font-bold text-muted-foreground">
+                          MM
+                        </FormLabel>
+
+                        <FormControl>
+                          <Input
                             placeholder="Rosadas"
                             {...field}
                           />
@@ -408,15 +516,15 @@ export default function ConsultaEditar() {
 
                   <FormField
                     control={form.control}
-                    name="em"
+                    name="estadoMental"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="font-bold text-muted-foreground tracking-wider">
+                        <FormLabel className="font-bold text-muted-foreground">
                           E.M.
                         </FormLabel>
+
                         <FormControl>
                           <Input
-                            className="h-11 text-base"
                             placeholder="Alerta"
                             {...field}
                           />
@@ -427,15 +535,15 @@ export default function ConsultaEditar() {
 
                   <FormField
                     control={form.control}
-                    name="tllc"
+                    name="trc"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="font-bold text-muted-foreground tracking-wider">
+                        <FormLabel className="font-bold text-muted-foreground">
                           TLLC
                         </FormLabel>
+
                         <FormControl>
                           <Input
-                            className="h-11 text-base font-mono"
                             placeholder="< 2 s"
                             {...field}
                           />
@@ -446,15 +554,15 @@ export default function ConsultaEditar() {
 
                   <FormField
                     control={form.control}
-                    name="ln"
+                    name="linfonodos"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="font-bold text-muted-foreground tracking-wider">
+                        <FormLabel className="font-bold text-muted-foreground">
                           LN
                         </FormLabel>
+
                         <FormControl>
                           <Input
-                            className="h-11 text-base"
                             placeholder="Normales"
                             {...field}
                           />
@@ -465,15 +573,15 @@ export default function ConsultaEditar() {
 
                   <FormField
                     control={form.control}
-                    name="fc"
+                    name="frecuenciaCardiaca"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="font-bold text-muted-foreground tracking-wider">
+                        <FormLabel className="font-bold text-muted-foreground">
                           FC
                         </FormLabel>
+
                         <FormControl>
                           <Input
-                            className="h-11 text-base font-mono"
                             type="number"
                             placeholder="lpm"
                             {...field}
@@ -482,18 +590,17 @@ export default function ConsultaEditar() {
                       </FormItem>
                     )}
                   />
-
-                  <FormField
+                                    <FormField
                     control={form.control}
-                    name="p"
+                    name="pulso"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="font-bold text-muted-foreground tracking-wider">
+                        <FormLabel className="font-bold text-muted-foreground">
                           P
                         </FormLabel>
+
                         <FormControl>
                           <Input
-                            className="h-11 text-base"
                             placeholder="Fuerte, débil, filiforme..."
                             {...field}
                           />
@@ -504,15 +611,15 @@ export default function ConsultaEditar() {
 
                   <FormField
                     control={form.control}
-                    name="dh"
+                    name="deshidratacion"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="font-bold text-muted-foreground tracking-wider">
+                        <FormLabel className="font-bold text-muted-foreground">
                           %DH
                         </FormLabel>
+
                         <FormControl>
                           <Input
-                            className="h-11 text-base font-mono"
                             placeholder="< 5%"
                             {...field}
                           />
@@ -523,15 +630,15 @@ export default function ConsultaEditar() {
 
                   <FormField
                     control={form.control}
-                    name="fr"
+                    name="frecuenciaRespiratoria"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="font-bold text-muted-foreground tracking-wider">
+                        <FormLabel className="font-bold text-muted-foreground">
                           FR
                         </FormLabel>
+
                         <FormControl>
                           <Input
-                            className="h-11 text-base font-mono"
                             type="number"
                             placeholder="rpm"
                             {...field}
@@ -543,15 +650,15 @@ export default function ConsultaEditar() {
 
                   <FormField
                     control={form.control}
-                    name="rt"
+                    name="ruidosTransito"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="font-bold text-muted-foreground tracking-wider">
+                        <FormLabel className="font-bold text-muted-foreground">
                           RT
                         </FormLabel>
+
                         <FormControl>
                           <Input
-                            className="h-11 text-base"
                             placeholder="Presentes"
                             {...field}
                           />
@@ -562,16 +669,16 @@ export default function ConsultaEditar() {
 
                   <FormField
                     control={form.control}
-                    name="cp"
+                    name="camposPulmonares"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="font-bold text-muted-foreground tracking-wider">
-                          C.P.
+                        <FormLabel className="font-bold text-muted-foreground">
+                          CP
                         </FormLabel>
+
                         <FormControl>
                           <Input
-                            className="h-11 text-base"
-                            placeholder="Campos pulmonares"
+                            placeholder="Normales"
                             {...field}
                           />
                         </FormControl>
@@ -581,16 +688,35 @@ export default function ConsultaEditar() {
 
                   <FormField
                     control={form.control}
-                    name="pp"
+                    name="ruidosDorsales"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="font-bold text-muted-foreground tracking-wider">
+                        <FormLabel className="font-bold text-muted-foreground">
+                          RD
+                        </FormLabel>
+
+                        <FormControl>
+                          <Input
+                            placeholder="Normales"
+                            {...field}
+                          />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="palmopercusion"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="font-bold text-muted-foreground">
                           PP
                         </FormLabel>
+
                         <FormControl>
                           <Input
-                            className="h-11 text-base"
-                            placeholder="Palmopercusión"
+                            placeholder="Negativa"
                             {...field}
                           />
                         </FormControl>
@@ -600,16 +726,16 @@ export default function ConsultaEditar() {
 
                   <FormField
                     control={form.control}
-                    name="pa"
+                    name="palpacionAbdominal"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="font-bold text-muted-foreground tracking-wider">
+                        <FormLabel className="font-bold text-muted-foreground">
                           PA
                         </FormLabel>
+
                         <FormControl>
                           <Input
-                            className="h-11 text-base"
-                            placeholder="Palpación abdominal"
+                            placeholder="Abdomen blando..."
                             {...field}
                           />
                         </FormControl>
@@ -627,45 +753,49 @@ export default function ConsultaEditar() {
                   </h3>
                 </div>
 
-                <FormField
-                  control={form.control}
-                  name="anamnesis"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-base font-semibold">
-                        Anamnesis
-                      </FormLabel>
-                      <FormControl>
-                        <Textarea
-                          className="min-h-[120px] text-base resize-y"
-                          placeholder="Evolución de síntomas, tiempo de inicio..."
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                <div className="grid grid-cols-1 gap-8">
+                  <FormField
+                    control={form.control}
+                    name="anamnesis"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-base font-semibold">
+                          Anamnesis
+                        </FormLabel>
 
-                <FormField
-                  control={form.control}
-                  name="exploracionFisica"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-base font-semibold">
-                        Exploración física por sistemas
-                      </FormLabel>
-                      <FormControl>
-                        <Textarea
-                          className="min-h-[120px] text-base resize-y"
-                          placeholder="Hallazgos adicionales..."
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                        <FormControl>
+                          <Textarea
+                            className="min-h-[120px]"
+                            {...field}
+                          />
+                        </FormControl>
+
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="exploracionFisica"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-base font-semibold">
+                          Exploración física por sistemas
+                        </FormLabel>
+
+                        <FormControl>
+                          <Textarea
+                            className="min-h-[120px]"
+                            {...field}
+                          />
+                        </FormControl>
+
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
               </div>
 
               <div className="space-y-6">
@@ -685,13 +815,14 @@ export default function ConsultaEditar() {
                         <FormLabel className="text-base font-semibold">
                           Diagnósticos diferenciales
                         </FormLabel>
+
                         <FormControl>
                           <Textarea
-                            className="min-h-[100px] text-base"
-                            placeholder="Listado de posibles patologías..."
+                            className="min-h-[100px]"
                             {...field}
                           />
                         </FormControl>
+
                         <FormMessage />
                       </FormItem>
                     )}
@@ -705,13 +836,14 @@ export default function ConsultaEditar() {
                         <FormLabel className="text-base font-bold text-primary">
                           Diagnóstico
                         </FormLabel>
+
                         <FormControl>
                           <Textarea
-                            className="min-h-[80px] text-base mt-2 border-primary/30 font-medium"
-                            placeholder="Diagnóstico principal..."
+                            className="min-h-[90px]"
                             {...field}
                           />
                         </FormControl>
+
                         <FormMessage />
                       </FormItem>
                     )}
@@ -726,13 +858,14 @@ export default function ConsultaEditar() {
                           <FormLabel className="text-base font-semibold">
                             Plan diagnóstico
                           </FormLabel>
+
                           <FormControl>
                             <Textarea
-                              className="min-h-[120px] text-base"
-                              placeholder="Laboratorio, imagenología, dieta..."
+                              className="min-h-[120px]"
                               {...field}
                             />
                           </FormControl>
+
                           <FormMessage />
                         </FormItem>
                       )}
@@ -746,20 +879,21 @@ export default function ConsultaEditar() {
                           <FormLabel className="text-base font-semibold">
                             Tratamiento aplicado
                           </FormLabel>
+
                           <FormControl>
                             <Textarea
-                              className="min-h-[120px] text-base"
-                              placeholder="Procedimientos aplicados durante la consulta..."
+                              className="min-h-[120px]"
                               {...field}
                             />
                           </FormControl>
+
                           <FormMessage />
                         </FormItem>
                       )}
                     />
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-muted/10 p-5 rounded-xl border border-border/40">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-muted/10 p-5 rounded-xl border">
                     <FormField
                       control={form.control}
                       name="pronostico"
@@ -768,13 +902,11 @@ export default function ConsultaEditar() {
                           <FormLabel className="text-base font-semibold">
                             Pronóstico
                           </FormLabel>
+
                           <FormControl>
-                            <Input
-                              className="h-12 text-base"
-                              placeholder="Favorable, reservado, grave..."
-                              {...field}
-                            />
+                            <Input {...field} />
                           </FormControl>
+
                           <FormMessage />
                         </FormItem>
                       )}
@@ -788,13 +920,11 @@ export default function ConsultaEditar() {
                           <FormLabel className="text-base font-semibold">
                             Próxima cita
                           </FormLabel>
+
                           <FormControl>
-                            <Input
-                              className="h-12 text-base"
-                              type="date"
-                              {...field}
-                            />
+                            <Input type="date" {...field} />
                           </FormControl>
+
                           <FormMessage />
                         </FormItem>
                       )}
@@ -809,13 +939,14 @@ export default function ConsultaEditar() {
                         <FormLabel className="text-base font-semibold">
                           Observaciones
                         </FormLabel>
+
                         <FormControl>
                           <Textarea
-                            className="min-h-[100px] text-base"
-                            placeholder="Indicaciones al propietario, notas adicionales..."
+                            className="min-h-[100px]"
                             {...field}
                           />
                         </FormControl>
+
                         <FormMessage />
                       </FormItem>
                     )}
@@ -829,7 +960,6 @@ export default function ConsultaEditar() {
                     variant="outline"
                     size="lg"
                     type="button"
-                    className="h-12 px-6 text-base"
                   >
                     Cancelar
                   </Button>
@@ -838,12 +968,12 @@ export default function ConsultaEditar() {
                 <Button
                   type="submit"
                   size="lg"
-                  className="h-12 px-8 text-base font-bold shadow-md"
                   disabled={updateConsulta.isPending}
                 >
                   {updateConsulta.isPending && (
                     <Loader2 className="mr-2 h-5 w-5 animate-spin" />
                   )}
+
                   Guardar cambios
                 </Button>
               </div>
