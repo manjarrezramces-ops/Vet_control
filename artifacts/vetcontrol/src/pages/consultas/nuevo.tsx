@@ -182,7 +182,7 @@ export default function ConsultaNueva() {
           </Button>
         </Link>
         <div>
-          <h1 className="text-4xl font-bold tracking-tight text-foreground">Nueva Consulta TEST</h1>
+          <h1 className="text-4xl font-bold tracking-tight text-foreground">Nueva Consulta </h1>
           <p className="text-lg text-muted-foreground mt-1 font-medium">Paciente: <span className="text-foreground">{pacienteData?.paciente.nombre}</span></p>
         </div>
       </div>
