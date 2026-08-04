@@ -45,33 +45,134 @@ export default function ConsultaDetalle() {
     if (consulta) setArchivo((consulta as typeof consulta & { archivoEstudios?: string | null }).archivoEstudios ?? null);
   }, [consulta]);
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setUploading(true);
-    try {
-      const urlRes = await fetch(`${BASE}/api/storage/uploads/request-url`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: file.name, size: file.size, contentType: file.type }),
-      });
-      const { uploadURL, objectPath } = await urlRes.json();
-      await fetch(uploadURL, { method: "PUT", headers: { "Content-Type": file.type }, body: file });
-      await fetch(`${BASE}/api/consultas/${id}/archivo`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ archivoEstudios: objectPath }),
-      });
-      setArchivo(objectPath);
-      toast({ title: "Archivo adjuntado", description: "El documento de estudios fue guardado." });
-    } catch {
-      toast({ variant: "destructive", title: "Error", description: "No se pudo subir el archivo." });
-    } finally {
-      setUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
-    }
-  };
+  const handleFileChange = async (
+  e: React.ChangeEvent<HTMLInputElement>,
+) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
 
+  const allowedTypes = new Set([
+    "application/pdf",
+    "image/png",
+    "image/jpeg",
+  ]);
+
+  if (!allowedTypes.has(file.type)) {
+    toast({
+      variant: "destructive",
+      title: "Formato no permitido",
+      description: "Solo puedes adjuntar archivos PDF, PNG, JPG o JPEG.",
+    });
+
+    e.target.value = "";
+    return;
+  }
+
+  setUploading(true);
+
+  try {
+    // 1. Solicitar una ruta de subida al backend.
+    const urlRes = await fetch(
+      `${BASE}/api/storage/uploads/request-url`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: file.name,
+          size: file.size,
+          contentType: file.type,
+        }),
+      },
+    );
+
+    if (!urlRes.ok) {
+      const message = await urlRes.text();
+      throw new Error(
+        `No se pudo generar la dirección de subida: ${urlRes.status} ${message}`,
+      );
+    }
+
+    const result = (await urlRes.json()) as {
+      uploadURL?: string;
+      objectPath?: string;
+    };
+
+    if (!result.uploadURL || !result.objectPath) {
+      throw new Error(
+        "El servidor no devolvió uploadURL u objectPath.",
+      );
+    }
+
+    // Convierte la ruta relativa en una URL del frontend.
+    // Render la reenviará al backend mediante la regla /api/*.
+    const uploadURL = result.uploadURL.startsWith("http")
+      ? result.uploadURL
+      : `${window.location.origin}${result.uploadURL}`;
+
+    // 2. Subir realmente el archivo.
+    const uploadRes = await fetch(uploadURL, {
+      method: "PUT",
+      headers: {
+        "Content-Type": file.type,
+      },
+      body: file,
+    });
+
+    if (!uploadRes.ok) {
+      const message = await uploadRes.text();
+      throw new Error(
+        `La subida fue rechazada: ${uploadRes.status} ${message}`,
+      );
+    }
+
+    // 3. Guardar la ruta del archivo en la consulta.
+    const saveRes = await fetch(
+      `${BASE}/api/consultas/${id}/archivo`,
+      {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          archivoEstudios: result.objectPath,
+        }),
+      },
+    );
+
+    if (!saveRes.ok) {
+      const message = await saveRes.text();
+      throw new Error(
+        `No se pudo asociar el archivo: ${saveRes.status} ${message}`,
+      );
+    }
+
+    setArchivo(result.objectPath);
+
+    toast({
+      title: "Archivo adjuntado",
+      description: "El documento de estudios fue guardado.",
+    });
+  } catch (error) {
+    console.error("Error al adjuntar archivo:", error);
+
+    toast({
+      variant: "destructive",
+      title: "Error al subir el archivo",
+      description:
+        error instanceof Error
+          ? error.message
+          : "No se pudo subir el archivo.",
+    });
+  } finally {
+    setUploading(false);
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  }
+};
   const handleRemoveArchivo = async () => {
     await fetch(`${BASE}/api/consultas/${id}/archivo`, {
       method: "PATCH",
