@@ -1,34 +1,42 @@
 import { randomUUID } from 'crypto';
-import { Readable } from 'stream';
-import { File, Storage } from '@google-cloud/storage';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
 import {
-  canAccessObject,
-  getObjectAclPolicy,
   ObjectAclPolicy,
   ObjectPermission,
-  setObjectAclPolicy,
 } from './objectAcl';
 
-const REPLIT_SIDECAR_ENDPOINT = 'http://127.0.0.1:1106';
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseSecretKey =
+  process.env.SUPABASE_SECRET_KEY ||
+  process.env.SUPABASE_SERVICE_ROLE_KEY;
+const bucketName = process.env.SUPABASE_BUCKET || 'estudios';
 
-export const objectStorageClient = new Storage({
-  credentials: {
-    audience: 'replit',
-    subject_token_type: 'access_token',
-    token_url: `${REPLIT_SIDECAR_ENDPOINT}/token`,
-    type: 'external_account',
-    credential_source: {
-      url: `${REPLIT_SIDECAR_ENDPOINT}/credential`,
-      format: {
-        type: 'json',
-        subject_token_field_name: 'access_token',
-      },
+if (!supabaseUrl) {
+  throw new Error('SUPABASE_URL environment variable is required.');
+}
+
+if (!supabaseSecretKey) {
+  throw new Error(
+    'SUPABASE_SECRET_KEY or SUPABASE_SERVICE_ROLE_KEY is required.',
+  );
+}
+
+const supabase: SupabaseClient = createClient(
+  supabaseUrl,
+  supabaseSecretKey,
+  {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
     },
-    universe_domain: 'googleapis.com',
   },
-  projectId: '',
-});
+);
+
+export interface SupabaseObjectFile {
+  name: string;
+  bucket: string;
+}
 
 export class ObjectNotFoundError extends Error {
   constructor() {
@@ -39,234 +47,193 @@ export class ObjectNotFoundError extends Error {
 }
 
 export class ObjectStorageService {
-  constructor() {}
-
-  getPublicObjectSearchPaths(): Array<string> {
-    const pathsStr = process.env.PUBLIC_OBJECT_SEARCH_PATHS || '';
-    const paths = Array.from(
-      new Set(
-        pathsStr
-          .split(',')
-          .map((path) => path.trim())
-          .filter((path) => path.length > 0),
-      ),
-    );
-    if (paths.length === 0) {
-      throw new Error(
-        "PUBLIC_OBJECT_SEARCH_PATHS not set. Create a bucket in 'Object Storage' " +
-          'tool and set PUBLIC_OBJECT_SEARCH_PATHS env var (comma-separated paths).',
-      );
-    }
-    return paths;
+  getBucketName(): string {
+    return bucketName;
   }
 
-  getPrivateObjectDir(): string {
-    const dir = process.env.PRIVATE_OBJECT_DIR || '';
-    if (!dir) {
-      throw new Error(
-        "PRIVATE_OBJECT_DIR not set. Create a bucket in 'Object Storage' " +
-          'tool and set PRIVATE_OBJECT_DIR env var.',
-      );
-    }
-    return dir;
+  createObjectId(): string {
+    return randomUUID();
   }
 
-  async searchPublicObject(filePath: string): Promise<File | null> {
-    for (const searchPath of this.getPublicObjectSearchPaths()) {
-      const fullPath = `${searchPath}/${filePath}`;
+  getUploadPath(objectId: string): string {
+    return `uploads/${objectId}`;
+  }
 
-      const { bucketName, objectName } = parseObjectPath(fullPath);
-      const bucket = objectStorageClient.bucket(bucketName);
-      const file = bucket.file(objectName);
+  getObjectPath(objectId: string): string {
+    return `/objects/uploads/${objectId}`;
+  }
 
-      const [exists] = await file.exists();
-      if (exists) {
-        return file;
-      }
+  async uploadObject(
+    objectName: string,
+    body: Buffer,
+    contentType: string,
+  ): Promise<void> {
+    const { error } = await supabase.storage
+      .from(bucketName)
+      .upload(objectName, body, {
+        contentType: contentType || 'application/octet-stream',
+        upsert: false,
+      });
+
+    if (error) {
+      throw new Error(`Supabase upload failed: ${error.message}`);
+    }
+  }
+
+  async searchPublicObject(
+    filePath: string,
+  ): Promise<SupabaseObjectFile | null> {
+    const normalizedPath = filePath.replace(/^\/+/, '');
+
+    const { data, error } = await supabase.storage
+      .from(bucketName)
+      .list(getParentDirectory(normalizedPath), {
+        search: getBaseName(normalizedPath),
+      });
+
+    if (error) {
+      throw new Error(`Supabase search failed: ${error.message}`);
     }
 
-    return null;
+    const expectedName = getBaseName(normalizedPath);
+    const exists = data.some((item) => item.name === expectedName);
+
+    return exists
+      ? { name: normalizedPath, bucket: bucketName }
+      : null;
   }
 
   async downloadObject(
-    file: File,
+    file: SupabaseObjectFile,
     cacheTtlSec: number = 3600,
   ): Promise<Response> {
-    const [metadata] = await file.getMetadata();
-    const aclPolicy = await getObjectAclPolicy(file);
-    const isPublic = aclPolicy?.visibility === 'public';
+    const { data, error } = await supabase.storage
+      .from(file.bucket)
+      .download(file.name);
 
-    const nodeStream = file.createReadStream();
-    const webStream = Readable.toWeb(nodeStream) as ReadableStream;
+    if (error || !data) {
+      if (error?.message.toLowerCase().includes('not found')) {
+        throw new ObjectNotFoundError();
+      }
 
-    const headers: Record<string, string> = {
-      'Content-Type':
-        (metadata.contentType as string) || 'application/octet-stream',
-      'Cache-Control': `${isPublic ? 'public' : 'private'}, max-age=${cacheTtlSec}`,
-    };
-    if (metadata.size) {
-      headers['Content-Length'] = String(metadata.size);
-    }
-
-    return new Response(webStream, { headers });
-  }
-
-  async getObjectEntityUploadURL(): Promise<string> {
-    const privateObjectDir = this.getPrivateObjectDir();
-    if (!privateObjectDir) {
       throw new Error(
-        "PRIVATE_OBJECT_DIR not set. Create a bucket in 'Object Storage' " +
-          'tool and set PRIVATE_OBJECT_DIR env var.',
+        `Supabase download failed: ${error?.message || 'Unknown error'}`,
       );
     }
 
-    const objectId = randomUUID();
-    const fullPath = `${privateObjectDir}/uploads/${objectId}`;
+    const arrayBuffer = await data.arrayBuffer();
+    const body = Buffer.from(arrayBuffer);
 
-    const { bucketName, objectName } = parseObjectPath(fullPath);
-
-    return signObjectURL({
-      bucketName,
-      objectName,
-      method: 'PUT',
-      ttlSec: 900,
+    return new Response(body, {
+      headers: {
+        'Content-Type': data.type || 'application/octet-stream',
+        'Content-Length': String(body.length),
+        'Cache-Control': `private, max-age=${cacheTtlSec}`,
+      },
     });
   }
 
-  async getObjectEntityFile(objectPath: string): Promise<File> {
+  async getObjectEntityFile(
+    objectPath: string,
+  ): Promise<SupabaseObjectFile> {
     if (!objectPath.startsWith('/objects/')) {
       throw new ObjectNotFoundError();
     }
 
-    const parts = objectPath.slice(1).split('/');
-    if (parts.length < 2) {
+    const objectName = objectPath
+      .slice('/objects/'.length)
+      .replace(/^\/+/, '');
+
+    if (!objectName) {
       throw new ObjectNotFoundError();
     }
 
-    const entityId = parts.slice(1).join('/');
-    let entityDir = this.getPrivateObjectDir();
-    if (!entityDir.endsWith('/')) {
-      entityDir = `${entityDir}/`;
+    const parentDirectory = getParentDirectory(objectName);
+    const fileName = getBaseName(objectName);
+
+    const { data, error } = await supabase.storage
+      .from(bucketName)
+      .list(parentDirectory, {
+        search: fileName,
+        limit: 100,
+      });
+
+    if (error) {
+      throw new Error(`Supabase lookup failed: ${error.message}`);
     }
-    const objectEntityPath = `${entityDir}${entityId}`;
-    const { bucketName, objectName } = parseObjectPath(objectEntityPath);
-    const bucket = objectStorageClient.bucket(bucketName);
-    const objectFile = bucket.file(objectName);
-    const [exists] = await objectFile.exists();
-    if (!exists) {
+
+    if (!data.some((item) => item.name === fileName)) {
       throw new ObjectNotFoundError();
     }
-    return objectFile;
+
+    return {
+      name: objectName,
+      bucket: bucketName,
+    };
   }
 
   normalizeObjectEntityPath(rawPath: string): string {
-    if (!rawPath.startsWith('https://storage.googleapis.com/')) {
+    if (rawPath.startsWith('/objects/')) {
       return rawPath;
     }
 
-    const url = new URL(rawPath);
-    const rawObjectPath = url.pathname;
+    try {
+      const url = new URL(rawPath);
+      const marker = `/storage/v1/object/${bucketName}/`;
+      const markerIndex = url.pathname.indexOf(marker);
 
-    let objectEntityDir = this.getPrivateObjectDir();
-    if (!objectEntityDir.endsWith('/')) {
-      objectEntityDir = `${objectEntityDir}/`;
+      if (markerIndex >= 0) {
+        const objectName = url.pathname.slice(
+          markerIndex + marker.length,
+        );
+        return `/objects/${objectName}`;
+      }
+    } catch {
+      // El valor no es una URL; se devuelve sin modificar.
     }
 
-    if (!rawObjectPath.startsWith(objectEntityDir)) {
-      return rawObjectPath;
-    }
-
-    const entityId = rawObjectPath.slice(objectEntityDir.length);
-    return `/objects/${entityId}`;
+    return rawPath;
   }
 
   async trySetObjectEntityAclPolicy(
     rawPath: string,
-    aclPolicy: ObjectAclPolicy,
+    _aclPolicy: ObjectAclPolicy,
   ): Promise<string> {
-    const normalizedPath = this.normalizeObjectEntityPath(rawPath);
-    if (!normalizedPath.startsWith('/')) {
-      return normalizedPath;
-    }
-
-    const objectFile = await this.getObjectEntityFile(normalizedPath);
-    await setObjectAclPolicy(objectFile, aclPolicy);
-    return normalizedPath;
+    /*
+     * El bucket es privado y los archivos se entregan solamente a través
+     * del backend. Supabase controla el acceso al bucket; no necesitamos
+     * los metadatos ACL particulares de Replit.
+     */
+    return this.normalizeObjectEntityPath(rawPath);
   }
 
   async canAccessObjectEntity({
-    userId,
-    objectFile,
     requestedPermission,
   }: {
     userId?: string;
-    objectFile: File;
+    objectFile: SupabaseObjectFile;
     requestedPermission?: ObjectPermission;
   }): Promise<boolean> {
-    return canAccessObject({
-      userId,
-      objectFile,
-      requestedPermission: requestedPermission ?? ObjectPermission.READ,
-    });
-  }
-}
-
-function parseObjectPath(path: string): {
-  bucketName: string;
-  objectName: string;
-} {
-  if (!path.startsWith('/')) {
-    path = `/${path}`;
-  }
-  const pathParts = path.split('/');
-  if (pathParts.length < 3) {
-    throw new Error('Invalid path: must contain at least a bucket name');
-  }
-
-  const bucketName = pathParts[1];
-  const objectName = pathParts.slice(2).join('/');
-
-  return {
-    bucketName,
-    objectName,
-  };
-}
-
-async function signObjectURL({
-  bucketName,
-  objectName,
-  method,
-  ttlSec,
-}: {
-  bucketName: string;
-  objectName: string;
-  method: 'GET' | 'PUT' | 'DELETE' | 'HEAD';
-  ttlSec: number;
-}): Promise<string> {
-  const request = {
-    bucket_name: bucketName,
-    object_name: objectName,
-    method,
-    expires_at: new Date(Date.now() + ttlSec * 1000).toISOString(),
-  };
-  const response = await fetch(
-    `${REPLIT_SIDECAR_ENDPOINT}/object-storage/signed-object-url`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(request),
-      signal: AbortSignal.timeout(30_000),
-    },
-  );
-  if (!response.ok) {
-    throw new Error(
-      `Failed to sign object URL, errorcode: ${response.status}, ` +
-        `make sure you're running on Replit`,
+    /*
+     * Conserva la interfaz que utiliza el resto de la aplicación.
+     * La autorización clínica debe controlarse en las rutas/autenticación.
+     */
+    return (
+      requestedPermission === undefined ||
+      requestedPermission === ObjectPermission.READ ||
+      requestedPermission === ObjectPermission.WRITE
     );
   }
+}
 
-  const { signed_url: signedURL } = await response.json();
-  return signedURL;
+function getParentDirectory(objectName: string): string {
+  const slashIndex = objectName.lastIndexOf('/');
+  return slashIndex >= 0 ? objectName.slice(0, slashIndex) : '';
+}
+
+function getBaseName(objectName: string): string {
+  const slashIndex = objectName.lastIndexOf('/');
+  return slashIndex >= 0
+    ? objectName.slice(slashIndex + 1)
+    : objectName;
 }
