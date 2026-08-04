@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { Router } from "express";
 import { db, recetasTable, recetaPartidasTable, pacientesTable, clientesTable } from "@workspace/db";
 import { eq, sql } from "drizzle-orm";
@@ -11,7 +12,26 @@ import {
 } from "@workspace/api-zod";
 
 const router = Router();
-
+const CreateRecetaBodyAllowEmpty = z.object({
+  consultaId: z.number().int().positive().optional(),
+  fecha: z.string().min(1),
+  medico: z.string().optional(),
+  indicacionesGenerales: z.string().optional(),
+  proximaRevision: z.string().optional(),
+  partidas: z
+    .array(
+      z.object({
+        medicamento: z.string().min(1),
+        presentacion: z.string().optional(),
+        dosis: z.string().min(1),
+        via: z.string().optional(),
+        frecuencia: z.string().optional(),
+        duracion: z.string().optional(),
+        instrucciones: z.string().optional(),
+      }),
+    )
+    .default([]),
+});
 // POST /pacientes/:pacienteId/recetas
 router.post("/pacientes/:pacienteId/recetas", async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.pacienteId) ? req.params.pacienteId[0] : req.params.pacienteId;
@@ -19,7 +39,10 @@ router.post("/pacientes/:pacienteId/recetas", async (req, res): Promise<void> =>
   if (isNaN(pacienteId)) { res.status(404).json({ error: "Not found" }); return; }
 
   CreateRecetaParams.safeParse({ pacienteId });
-  const parsed = CreateRecetaBody.safeParse(req.body);
+  const parsed = CreateRecetaBodyAllowEmpty.safeParse({
+  ...req.body,
+  partidas: req.body?.partidas ?? [],
+});
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
   const [paciente] = await db
