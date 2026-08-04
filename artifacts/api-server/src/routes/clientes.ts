@@ -29,7 +29,24 @@ router.get("/clientes", async (req, res): Promise<void> => {
       telefono: clientesTable.telefono,
       email: clientesTable.email,
       totalPacientes: sql<number>`(SELECT COUNT(*) FROM pacientes WHERE cliente_id = clientes.id)`,
-      saldo: sql<number>`COALESCE((SELECT SUM(CASE WHEN tipo='Pago' THEN -importe::numeric ELSE importe::numeric END) FROM movimientos WHERE cliente_id = clientes.id), 0)`,
+      saldo: sql<number>`
+  COALESCE(
+    (
+      SELECT SUM(
+        CASE
+          WHEN liquidado = true THEN 0
+          ELSE GREATEST(
+            monto::numeric - COALESCE(monto_pagado::numeric, 0),
+            0
+          )
+        END
+      )
+      FROM cuentas_cliente
+      WHERE cliente_id = clientes.id
+    ),
+    0
+  )
+`, ELSE importe::numeric END) FROM movimientos WHERE cliente_id = clientes.id), 0)`,
     })
     .from(clientesTable)
     .$dynamic();
@@ -74,11 +91,25 @@ router.get("/clientes/:clienteId", async (req, res): Promise<void> => {
   if (!cliente) { res.status(404).json({ error: "Cliente no encontrado" }); return; }
 
   const [saldoRow] = await db
-    .select({
-      saldo: sql<string>`COALESCE(SUM(CASE WHEN tipo='Pago' THEN -importe::numeric ELSE importe::numeric END), 0)`,
-    })
-    .from(movimientosTable)
-    .where(eq(movimientosTable.clienteId, clienteId));
+  .select({
+    saldo: sql<string>`
+      COALESCE(
+        SUM(
+          CASE
+            WHEN ${cuentasClienteTable.liquidado} = true THEN 0
+            ELSE GREATEST(
+              ${cuentasClienteTable.monto}::numeric -
+              COALESCE(${cuentasClienteTable.montoPagado}::numeric, 0),
+              0
+            )
+          END
+        ),
+        0
+      )
+    `,
+  })
+  .from(cuentasClienteTable)
+  .where(eq(cuentasClienteTable.clienteId, clienteId));
 
   const pacientes = await db
     .select({
