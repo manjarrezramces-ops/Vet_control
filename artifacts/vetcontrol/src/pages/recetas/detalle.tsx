@@ -57,32 +57,131 @@ export default function RecetaDetalle() {
     onError: () => toast({ variant: "destructive", title: "No se pudo eliminar" }),
   });
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setUploading(true);
-    try {
-      const urlRes = await fetch(`${BASE()}/api/storage/uploads/request-url`, {
+  const handleFileChange = async (
+  e: React.ChangeEvent<HTMLInputElement>,
+) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
+
+  const allowedTypes = new Set([
+    "application/pdf",
+    "image/png",
+    "image/jpeg",
+  ]);
+
+  if (!allowedTypes.has(file.type)) {
+    toast({
+      variant: "destructive",
+      title: "Formato no permitido",
+      description: "Solo puedes adjuntar PDF, PNG, JPG o JPEG.",
+    });
+
+    e.target.value = "";
+    return;
+  }
+
+  setUploading(true);
+
+  try {
+    const urlRes = await fetch(
+      `${BASE()}/api/storage/uploads/request-url`,
+      {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: file.name, size: file.size, contentType: file.type }),
-      });
-      const { uploadURL, objectPath } = await urlRes.json();
-      await fetch(uploadURL, { method: "PUT", headers: { "Content-Type": file.type }, body: file });
-      await fetch(`${BASE()}/api/recetas/${id}/archivo`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ archivoImagen: objectPath }),
-      });
-      queryClient.invalidateQueries({ queryKey: ["receta", id] });
-      toast({ title: "Archivo adjuntado" });
-    } catch {
-      toast({ variant: "destructive", title: "Error al subir el archivo" });
-    } finally {
-      setUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: file.name,
+          size: file.size,
+          contentType: file.type,
+        }),
+      },
+    );
+
+    if (!urlRes.ok) {
+      const message = await urlRes.text();
+      throw new Error(
+        `No se pudo preparar la subida: ${urlRes.status} ${message}`,
+      );
     }
-  };
+
+    const result = (await urlRes.json()) as {
+      uploadURL?: string;
+      objectPath?: string;
+    };
+
+    if (!result.uploadURL || !result.objectPath) {
+      throw new Error(
+        "El servidor no devolvió uploadURL u objectPath.",
+      );
+    }
+
+    const uploadURL = result.uploadURL.startsWith("http")
+      ? result.uploadURL
+      : `${window.location.origin}${result.uploadURL}`;
+
+    const uploadRes = await fetch(uploadURL, {
+      method: "PUT",
+      headers: {
+        "Content-Type": file.type,
+      },
+      body: file,
+    });
+
+    if (!uploadRes.ok) {
+      const message = await uploadRes.text();
+      throw new Error(
+        `La subida fue rechazada: ${uploadRes.status} ${message}`,
+      );
+    }
+
+    const saveRes = await fetch(
+      `${BASE()}/api/recetas/${id}/archivo`,
+      {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          archivoImagen: result.objectPath,
+        }),
+      },
+    );
+
+    if (!saveRes.ok) {
+      const message = await saveRes.text();
+      throw new Error(
+        `No se pudo asociar el archivo a la receta: ${saveRes.status} ${message}`,
+      );
+    }
+
+    await queryClient.invalidateQueries({
+      queryKey: ["receta", id],
+    });
+
+    toast({
+      title: "Archivo adjuntado",
+      description: "La receta fue guardada correctamente.",
+    });
+  } catch (error) {
+    console.error("Error al adjuntar receta:", error);
+
+    toast({
+      variant: "destructive",
+      title: "Error al subir el archivo",
+      description:
+        error instanceof Error
+          ? error.message
+          : "No se pudo subir el archivo.",
+    });
+  } finally {
+    setUploading(false);
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  }
+};
 
   const handleRemove = async () => {
     await fetch(`${BASE()}/api/recetas/${id}/archivo`, {
