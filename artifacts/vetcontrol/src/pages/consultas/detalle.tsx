@@ -353,6 +353,7 @@ export default function ConsultaDetalle() {
     </div>
   ))}
 </div>
+            </div>
           <Separator />
 
           <div className="p-8 space-y-8">
