@@ -46,7 +46,7 @@ router.get("/clientes", async (req, res): Promise<void> => {
     ),
     0
   )
-`, ELSE importe::numeric END) FROM movimientos WHERE cliente_id = clientes.id), 0)`,
+`, 
     })
     .from(clientesTable)
     .$dynamic();
@@ -90,26 +90,26 @@ router.get("/clientes/:clienteId", async (req, res): Promise<void> => {
   const [cliente] = await db.select().from(clientesTable).where(eq(clientesTable.id, clienteId));
   if (!cliente) { res.status(404).json({ error: "Cliente no encontrado" }); return; }
 
-  const [saldoRow] = await db
-  .select({
-    saldo: sql<string>`
-      COALESCE(
-        SUM(
+const [saldoRow] = await db.select({
+  saldo: sql<string>`
+    COALESCE(
+      (
+        SELECT SUM(
           CASE
-            WHEN ${cuentasClienteTable.liquidado} = true THEN 0
+            WHEN liquidado = true THEN 0
             ELSE GREATEST(
-              ${cuentasClienteTable.monto}::numeric -
-              COALESCE(${cuentasClienteTable.montoPagado}::numeric, 0),
+              monto::numeric - COALESCE(monto_pagado::numeric, 0),
               0
             )
           END
-        ),
-        0
-      )
-    `,
-  })
-  .from(cuentasClienteTable)
-  .where(eq(cuentasClienteTable.clienteId, clienteId));
+        )
+        FROM cuentas_cliente
+        WHERE cliente_id = ${clienteId}
+      ),
+      0
+    )
+  `,
+});
 
   const pacientes = await db
     .select({
