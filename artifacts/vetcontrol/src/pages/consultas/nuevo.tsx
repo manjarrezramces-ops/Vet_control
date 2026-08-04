@@ -70,6 +70,7 @@ export default function ConsultaNueva() {
     query: { enabled: !!pacienteId, queryKey: getGetPacienteQueryKey(pacienteId) },
   });
 
+
   const createConsulta = useCreateConsulta();
 
   const form = useForm<FormValues>({
