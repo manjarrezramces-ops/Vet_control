@@ -32,6 +32,7 @@ const formSchema = z.object({
   tllc: z.string().optional(),
   ln: z.string().optional(),
   fc: z.coerce.number().optional().or(z.literal("")),
+  p: z. string().optional(),
   dh: z.string().optional(),
   fr: z.coerce.number().optional().or(z.literal("")),
   rt: z.string().optional(),
@@ -39,7 +40,6 @@ const formSchema = z.object({
   rd: z.string().optional(),
   pp: z.string().optional(),
   pa: z.string().optional(),
-  p: z. string().optional(),
   anamnesis: z.string().optional(),
   exploracionFisica: z.string().optional(),
   diagnosticosDiferenciales: z.string().optional(),
@@ -82,7 +82,7 @@ export default function ConsultaNueva() {
       medico: "",
       motivo: "",
       cc: "", em: "", mm: "", tllc: "", ln: "",
-      fc: "", dh: "", fr: "", rt: "", cp: "", rd: "", pp: "", pa: "", p: "",
+      fc: "",p: "",dh: "", fr: "", rt: "", cp: "", rd: "", pp: "", pa: "", 
       anamnesis: "",
       diagnosticosDiferenciales: "",
       diagnostico: "",
@@ -285,6 +285,25 @@ export default function ConsultaNueva() {
                       <FormControl><Input className="h-11 text-base font-mono" type="number" placeholder="lpm" {...field} /></FormControl>
                     </FormItem>
                   )} />
+                  {/* P */}
+<FormField
+  control={form.control}
+  name="p"
+  render={({ field }) => (
+    <FormItem>
+      <FormLabel className="font-bold text-muted-foreground tracking-wider">
+        P
+      </FormLabel>
+      <FormControl>
+        <Input
+          className="h-11 text-base"
+          placeholder="Fuerte, débil, filiforme..."
+          {...field}
+        />
+      </FormControl>
+    </FormItem>
+  )}
+/>
                   {/* %DH */}
                   <FormField control={form.control} name="dh" render={({ field }) => (
                     <FormItem>
