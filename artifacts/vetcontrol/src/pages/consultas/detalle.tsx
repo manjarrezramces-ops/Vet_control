@@ -270,6 +270,20 @@ export default function ConsultaDetalle() {
             </h4>
            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
   {[
+      {
+  label: "PESO",
+  value:
+    consulta.peso != null
+      ? `${consulta.peso} kg`
+      : null,
+},
+{
+  label: "TEMP.",
+  value:
+    consulta.temperatura != null
+      ? `${consulta.temperatura} °C`
+      : null,
+},
     {
       label: "CC",
       value: consulta.condicionCorporal,
