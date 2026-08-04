@@ -1,8 +1,7 @@
 import { Readable } from 'stream';
 import { z } from 'zod';
-import {
+import express, {
   Router,
-  express,
   type IRouter,
   type Request,
   type Response,
