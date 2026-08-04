@@ -82,7 +82,7 @@ export default function ConsultaNueva() {
       medico: "",
       motivo: "",
       cc: "", em: "", mm: "", tllc: "", ln: "",
-      fc: "", dh: "", fr: "", rt: "", cp: "", rd: "", pp: "", pa: "", p: "" 
+      fc: "", dh: "", fr: "", rt: "", cp: "", rd: "", pp: "", pa: "", p: "",
       anamnesis: "",
       diagnosticosDiferenciales: "",
       diagnostico: "",
