@@ -1,6 +1,15 @@
 import { useGetDashboard, getGetDashboardQueryKey } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Users, Cat, Stethoscope, Clock, CalendarCheck, Activity, BedDouble, AlertTriangle } from "lucide-react";
+import {
+  Users,
+  Cat,
+  Stethoscope,
+  Clock,
+  CalendarCheck,
+  Activity,
+  BedDouble,
+  AlertTriangle,
+} from "lucide-react";
 import { Link } from "wouter";
 import { format } from "date-fns";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -44,10 +53,16 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-10">
-      <div>
-        <h1 className="text-4xl font-bold tracking-tight text-foreground">Inicio</h1>
-        <p className="text-lg text-muted-foreground mt-2">Resumen general de la clínica.</p>
-      </div>
+     <div>
+  <h1 className="text-4xl font-bold tracking-tight text-foreground">
+    Inicio
+  </h1>
+  <p className="text-lg text-muted-foreground mt-2">
+    Resumen general de la clínica.
+  </p>
+</div>
+          
+          
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
         <Card className="hover:shadow-md transition-shadow">
