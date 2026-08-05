@@ -8,3 +8,6 @@ export * from "./hospitalizaciones";
 export * from "./hospitalizacion_archivos";
 export * from "./procedimientos";
 export * from "./cuentas_cliente";
+export * from "./vacunaciones";
+export * from "./pruebas_felinas";
+export * from "./desparasitaciones";
