@@ -21,6 +21,7 @@ timeoutMs = 20000
 
 [nix]
 channel = "stable-25_05"
+packages = ["python311Full"]
 
 [objectStorage]
 defaultBucketID = "replit-objstore-c8476b20-1540-4a02-b02f-45fad9418dc5"
