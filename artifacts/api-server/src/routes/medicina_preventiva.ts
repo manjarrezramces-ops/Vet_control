@@ -19,11 +19,6 @@ const router = Router();
 type EspeciePreventiva = "Perro" | "Gato";
 type EtapaPreventiva = "Cachorro" | "Adulto";
 
-type EstadoVacunacion =
-  | "Aplicada"
-  | "Programada/Pendiente"
-  | "Cancelada";
-
 type EstadoCalculado =
   | "Sin historial"
   | "Al corriente"
@@ -52,12 +47,15 @@ type ResumenVacunal = {
 };
 
 /* =========================================================
-   ESQUEMAS DE VALIDACIÓN
+   VALIDACIONES
 ========================================================= */
 
 const idSchema = z.coerce.number().int().positive();
 
-const origenSchema = z.enum(["Clinica", "Externa"]);
+const origenSchema = z.enum([
+  "Clinica",
+  "Externa",
+]);
 
 const estadoVacunaSchema = z.enum([
   "Aplicada",
@@ -65,17 +63,26 @@ const estadoVacunaSchema = z.enum([
   "Cancelada",
 ]);
 
-const vacunaSchema = z.object({
+const vacunaBaseSchema = z.object({
+  id: z.number().int().positive().optional(),
+
   vacuna: z.string().min(1),
-  especie: z.enum(["Perro", "Gato"]),
-  etapa: z.enum(["Cachorro", "Adulto"]),
+
+  especie: z.enum([
+    "Perro",
+    "Gato",
+  ]),
+
+  etapa: z.enum([
+    "Cachorro",
+    "Adulto",
+  ]),
 
   marca: z.string().optional(),
   laboratorio: z.string().optional(),
   lote: z.string().optional(),
   fechaCaducidad: z.string().optional(),
 
-  fechaAplicacion: z.string().min(1),
   fechaVencimiento: z.string().optional(),
   proximaAplicacion: z.string().optional(),
 
@@ -92,12 +99,17 @@ const vacunaSchema = z.object({
 });
 
 const crearVisitaVacunacionSchema = z.object({
-  consultaId: z.number().int().positive().optional(),
-
-  fechaVisita: z.string().min(1),
+  consultaId: z
+    .number()
+    .int()
+    .positive()
+    .optional(),
 
   intervaloDias: z
-    .union([z.literal(15), z.literal(21)])
+    .union([
+      z.literal(15),
+      z.literal(21),
+    ])
     .optional(),
 
   origen: origenSchema.optional(),
@@ -107,18 +119,35 @@ const crearVisitaVacunacionSchema = z.object({
   clinicaExterna: z.string().optional(),
   medicoExterno: z.string().optional(),
 
-  comprobantePresentado: z.boolean().optional(),
+  comprobantePresentado:
+    z.boolean().optional(),
 
   observaciones: z.string().optional(),
 
-  vacunas: z.array(vacunaSchema).min(1).max(2),
+  vacunas: z
+    .array(vacunaBaseSchema)
+    .min(1)
+    .max(2),
 });
 
-const actualizarVacunaSchema = vacunaSchema.partial();
+const actualizarVisitaVacunacionSchema =
+  crearVisitaVacunacionSchema.partial().extend({
+    vacunas: z
+      .array(vacunaBaseSchema)
+      .min(1)
+      .max(2),
+  });
+
+const actualizarVacunaSchema =
+  vacunaBaseSchema.partial();
 
 const crearDesparasitacionSchema = z
   .object({
-    consultaId: z.number().int().positive().optional(),
+    consultaId: z
+      .number()
+      .int()
+      .positive()
+      .optional(),
 
     fechaAplicacion: z.string().min(1),
 
@@ -136,9 +165,17 @@ const crearDesparasitacionSchema = z
     cubreInternos: z.boolean().optional(),
     cubreExternos: z.boolean().optional(),
 
-    duracionDias: z.number().int().positive().optional(),
+    duracionDias: z
+      .number()
+      .int()
+      .positive()
+      .optional(),
 
-    frecuenciaDias: z.number().int().positive().optional(),
+    frecuenciaDias: z
+      .number()
+      .int()
+      .positive()
+      .optional(),
 
     proximaAplicacion: z.string().optional(),
 
@@ -172,7 +209,8 @@ const crearDesparasitacionSchema = z
 
     observaciones: z.string().optional(),
 
-    comprobantePresentado: z.boolean().optional(),
+    comprobantePresentado:
+      z.boolean().optional(),
 
     archivoComprobante: z.string().optional(),
   })
@@ -191,7 +229,11 @@ const actualizarDesparasitacionSchema =
   crearDesparasitacionSchema.partial();
 
 const crearPruebaFelinaSchema = z.object({
-  consultaId: z.number().int().positive().optional(),
+  consultaId: z
+    .number()
+    .int()
+    .positive()
+    .optional(),
 
   fechaPrueba: z.string().min(1),
   fechaResultado: z.string().optional(),
@@ -220,11 +262,16 @@ const crearPruebaFelinaSchema = z.object({
     "Pendiente",
   ]),
 
-  comprobantePresentado: z.boolean().optional(),
+  comprobantePresentado:
+    z.boolean().optional(),
 
   archivoResultado: z.string().optional(),
 
-  edadMeses: z.number().int().nonnegative().optional(),
+  edadMeses: z
+    .number()
+    .int()
+    .nonnegative()
+    .optional(),
 
   decisionLeucemia: z
     .enum([
@@ -247,17 +294,55 @@ const actualizarPruebaFelinaSchema =
   crearPruebaFelinaSchema.partial();
 
 /* =========================================================
-   FUNCIONES GENERALES
+   FECHAS
 ========================================================= */
 
-function readId(
-  value: string | string[] | undefined,
-): number | null {
-  const parsed = idSchema.safeParse(
-    Array.isArray(value) ? value[0] : value,
-  );
+function fechaActualMexico(): string {
+  const partes = new Intl.DateTimeFormat(
+    "en-CA",
+    {
+      timeZone: "America/Mexico_City",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    },
+  ).formatToParts(new Date());
 
-  return parsed.success ? parsed.data : null;
+  const year =
+    partes.find(
+      (parte) => parte.type === "year",
+    )?.value ?? "";
+
+  const month =
+    partes.find(
+      (parte) => parte.type === "month",
+    )?.value ?? "";
+
+  const day =
+    partes.find(
+      (parte) => parte.type === "day",
+    )?.value ?? "";
+
+  return `${year}-${month}-${day}`;
+}
+
+function fechaCorta(
+  value: string | null | undefined,
+): string | null {
+  if (!value) {
+    return null;
+  }
+
+  return value.slice(0, 10);
+}
+
+function esFechaActual(
+  fecha: string | null | undefined,
+): boolean {
+  return (
+    fechaCorta(fecha) ===
+    fechaActualMexico()
+  );
 }
 
 function addDays(
@@ -270,24 +355,22 @@ function addDays(
 
   date.setDate(date.getDate() + days);
 
-  return date.toISOString().slice(0, 10);
+  return date
+    .toISOString()
+    .slice(0, 10);
 }
 
 function differenceInDays(
   targetDate: string,
-  baseDate = new Date(),
 ): number {
   const target = new Date(
     `${targetDate.slice(0, 10)}T12:00:00`,
   );
 
+  const hoy = fechaActualMexico();
+
   const base = new Date(
-    baseDate.getFullYear(),
-    baseDate.getMonth(),
-    baseDate.getDate(),
-    12,
-    0,
-    0,
+    `${hoy}T12:00:00`,
   );
 
   return Math.round(
@@ -296,14 +379,43 @@ function differenceInDays(
   );
 }
 
-function normalizeText(value: string): string {
+/* =========================================================
+   FUNCIONES GENERALES
+========================================================= */
+
+function readId(
+  value: string | string[] | undefined,
+): number | null {
+  const parsed = idSchema.safeParse(
+    Array.isArray(value)
+      ? value[0]
+      : value,
+  );
+
+  return parsed.success
+    ? parsed.data
+    : null;
+}
+
+function normalizeText(
+  value: string,
+): string {
   return value
     .trim()
     .toLowerCase()
     .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^\w\s]/g, " ")
-    .replace(/\s+/g, " ");
+    .replace(
+      /[\u0300-\u036f]/g,
+      "",
+    )
+    .replace(
+      /[^\w\s]/g,
+      " ",
+    )
+    .replace(
+      /\s+/g,
+      " ",
+    );
 }
 
 function normalizarEspecie(
@@ -313,7 +425,8 @@ function normalizarEspecie(
     return null;
   }
 
-  const normalizada = normalizeText(especie);
+  const normalizada =
+    normalizeText(especie);
 
   if (
     normalizada === "perro" ||
@@ -333,7 +446,10 @@ function normalizarEspecie(
 }
 
 function calcularEdadMeses(
-  fechaNacimiento: string | null | undefined,
+  fechaNacimiento:
+    | string
+    | null
+    | undefined,
 ): number | null {
   if (!fechaNacimiento) {
     return null;
@@ -343,34 +459,51 @@ function calcularEdadMeses(
     `${fechaNacimiento.slice(0, 10)}T12:00:00`,
   );
 
-  if (Number.isNaN(nacimiento.getTime())) {
+  if (
+    Number.isNaN(
+      nacimiento.getTime(),
+    )
+  ) {
     return null;
   }
 
-  const hoy = new Date();
+  const hoy = new Date(
+    `${fechaActualMexico()}T12:00:00`,
+  );
 
   let meses =
-    (hoy.getFullYear() - nacimiento.getFullYear()) *
+    (hoy.getFullYear() -
+      nacimiento.getFullYear()) *
       12 +
     hoy.getMonth() -
     nacimiento.getMonth();
 
-  if (hoy.getDate() < nacimiento.getDate()) {
+  if (
+    hoy.getDate() <
+    nacimiento.getDate()
+  ) {
     meses -= 1;
   }
 
-  return Math.max(0, meses);
+  return Math.max(
+    0,
+    meses,
+  );
 }
 
 function determinarEtapa(
   edadMeses: number | null,
   ultimaEtapa?: string | null,
 ): EtapaPreventiva | null {
-  if (ultimaEtapa === "Cachorro") {
+  if (
+    ultimaEtapa === "Cachorro"
+  ) {
     return "Cachorro";
   }
 
-  if (ultimaEtapa === "Adulto") {
+  if (
+    ultimaEtapa === "Adulto"
+  ) {
     return "Adulto";
   }
 
@@ -389,7 +522,12 @@ async function getPatient(
   const [paciente] = await db
     .select()
     .from(pacientesTable)
-    .where(eq(pacientesTable.id, pacienteId));
+    .where(
+      eq(
+        pacientesTable.id,
+        pacienteId,
+      ),
+    );
 
   return paciente ?? null;
 }
@@ -397,11 +535,13 @@ async function getPatient(
 async function patientExists(
   pacienteId: number,
 ): Promise<boolean> {
-  return Boolean(await getPatient(pacienteId));
+  return Boolean(
+    await getPatient(pacienteId),
+  );
 }
 
 /* =========================================================
-   NORMALIZACIÓN DE NOMBRES DE VACUNAS
+   NORMALIZACIÓN DE VACUNAS
 ========================================================= */
 
 function identificarVacuna(
@@ -417,7 +557,8 @@ function identificarVacuna(
   | "Cuadruple felina"
   | "Leucemia felina"
   | null {
-  const normalizada = normalizeText(nombre);
+  const normalizada =
+    normalizeText(nombre);
 
   if (
     normalizada.includes("triple") &&
@@ -440,11 +581,15 @@ function identificarVacuna(
     return "Leucemia felina";
   }
 
-  if (normalizada.includes("bordetella")) {
+  if (
+    normalizada.includes("bordetella")
+  ) {
     return "Bordetella";
   }
 
-  if (normalizada.includes("giardia")) {
+  if (
+    normalizada.includes("giardia")
+  ) {
     return "Giardia";
   }
 
@@ -491,7 +636,10 @@ function serializeVaccinationVisit<
 >(record: T) {
   return {
     ...record,
-    creadoEn: record.creadoEn.toISOString(),
+
+    creadoEn:
+      record.creadoEn.toISOString(),
+
     actualizadoEn:
       record.actualizadoEn.toISOString(),
   };
@@ -505,7 +653,10 @@ function serializeVaccine<
 >(record: T) {
   return {
     ...record,
-    creadoEn: record.creadoEn.toISOString(),
+
+    creadoEn:
+      record.creadoEn.toISOString(),
+
     actualizadoEn:
       record.actualizadoEn.toISOString(),
   };
@@ -519,7 +670,10 @@ function serializeDeworming<
 >(record: T) {
   return {
     ...record,
-    creadoEn: record.creadoEn.toISOString(),
+
+    creadoEn:
+      record.creadoEn.toISOString(),
+
     actualizadoEn:
       record.actualizadoEn.toISOString(),
   };
@@ -533,10 +687,133 @@ function serializeFelineTest<
 >(record: T) {
   return {
     ...record,
-    creadoEn: record.creadoEn.toISOString(),
+
+    creadoEn:
+      record.creadoEn.toISOString(),
+
     actualizadoEn:
       record.actualizadoEn.toISOString(),
   };
+}
+
+/* =========================================================
+   VALIDACIÓN DE UNA VISITA
+========================================================= */
+
+function validarVacunasDeVisita(
+  vacunas: z.infer<
+    typeof vacunaBaseSchema
+  >[],
+  especiePaciente:
+    | EspeciePreventiva
+    | null,
+): string | null {
+  const especies = new Set(
+    vacunas.map(
+      (vacuna) => vacuna.especie,
+    ),
+  );
+
+  if (especies.size !== 1) {
+    return (
+      "Todas las vacunas de la visita " +
+      "deben corresponder a la misma especie."
+    );
+  }
+
+  const etapas = new Set(
+    vacunas.map(
+      (vacuna) => vacuna.etapa,
+    ),
+  );
+
+  if (etapas.size !== 1) {
+    return (
+      "Todas las vacunas de la visita " +
+      "deben corresponder a la misma etapa."
+    );
+  }
+
+  const especie =
+    vacunas[0]?.especie;
+
+  if (
+    especiePaciente &&
+    especiePaciente !== especie
+  ) {
+    return (
+      "La especie seleccionada no coincide " +
+      "con la especie registrada del paciente."
+    );
+  }
+
+  return null;
+}
+
+async function validarLeucemiaFelina(
+  pacienteId: number,
+  vacunas: z.infer<
+    typeof vacunaBaseSchema
+  >[],
+): Promise<string | null> {
+  const incluyeLeucemia =
+    vacunas.some(
+      (vacuna) =>
+        identificarVacuna(
+          vacuna.vacuna,
+        ) === "Leucemia felina",
+    );
+
+  if (!incluyeLeucemia) {
+    return null;
+  }
+
+  const [ultimaPrueba] = await db
+    .select()
+    .from(pruebasFelinasTable)
+    .where(
+      eq(
+        pruebasFelinasTable.pacienteId,
+        pacienteId,
+      ),
+    )
+    .orderBy(
+      desc(
+        pruebasFelinasTable.fechaPrueba,
+      ),
+    )
+    .limit(1);
+
+  if (!ultimaPrueba) {
+    return (
+      "Para registrar la vacuna contra " +
+      "leucemia felina debe existir una " +
+      "prueba FIV/FeLV previa."
+    );
+  }
+
+  if (
+    ultimaPrueba.resultadoFelv !==
+    "Negativo"
+  ) {
+    return (
+      "La última prueba FeLV registrada " +
+      "no tiene resultado negativo."
+    );
+  }
+
+  if (
+    ultimaPrueba.decisionLeucemia !==
+    "Aplicar"
+  ) {
+    return (
+      "La última prueba felina no tiene " +
+      "registrada la decisión médica de " +
+      "aplicar leucemia."
+    );
+  }
+
+  return null;
 }
 
 /* =========================================================
@@ -556,7 +833,8 @@ function estadoPorFecha(
     };
   }
 
-  const dias = differenceInDays(fecha);
+  const dias =
+    differenceInDays(fecha);
 
   if (dias < 0) {
     return {
@@ -596,7 +874,8 @@ function construirPendientesPerro(
   etapa: EtapaPreventiva,
   aplicadas: Set<string>,
 ): VacunaSugerida[] {
-  const pendientes: VacunaSugerida[] = [];
+  const pendientes:
+    VacunaSugerida[] = [];
 
   if (etapa === "Cachorro") {
     if (
@@ -653,13 +932,28 @@ function construirPendientesPerro(
   if (
     !tieneVacunaAplicada(
       aplicadas,
+      "Rabia",
+    )
+  ) {
+    pendientes.push({
+      vacuna: "Rabia",
+      motivo:
+        "Según edad, esquema y normativa.",
+      requiereDecisionMedica: true,
+    });
+  }
+
+  if (
+    !tieneVacunaAplicada(
+      aplicadas,
       "Bordetella",
     )
   ) {
     pendientes.push({
       vacuna: "Bordetella",
       motivo:
-        "Vacuna pendiente del esquema preventivo.",
+        "Según riesgo y criterio médico.",
+      requiereDecisionMedica: true,
     });
   }
 
@@ -672,20 +966,8 @@ function construirPendientesPerro(
     pendientes.push({
       vacuna: "Giardia",
       motivo:
-        "Vacuna pendiente del esquema preventivo.",
-    });
-  }
-
-  if (
-    !tieneVacunaAplicada(
-      aplicadas,
-      "Rabia",
-    )
-  ) {
-    pendientes.push({
-      vacuna: "Rabia",
-      motivo:
-        "Vacuna antirrábica pendiente.",
+        "Según riesgo y criterio médico.",
+      requiereDecisionMedica: true,
     });
   }
 
@@ -698,15 +980,20 @@ function construirPendientesGato(
   ultimaPruebaFelina:
     | {
         resultadoFelv: string;
-        decisionLeucemia: string | null;
+        decisionLeucemia:
+          | string
+          | null;
       }
     | null,
 ): {
   pendientes: VacunaSugerida[];
   advertencias: string[];
 } {
-  const pendientes: VacunaSugerida[] = [];
-  const advertencias: string[] = [];
+  const pendientes:
+    VacunaSugerida[] = [];
+
+  const advertencias:
+    string[] = [];
 
   const tieneTriple =
     tieneVacunaAplicada(
@@ -725,7 +1012,7 @@ function construirPendientesGato(
       pendientes.push({
         vacuna: "Triple felina",
         motivo:
-          "Primera vacuna obligatoria del esquema felino de cachorro.",
+          "Primera vacuna del esquema felino de cachorro.",
       });
     } else if (!tieneCuadruple) {
       pendientes.push({
@@ -756,7 +1043,8 @@ function construirPendientesGato(
     pendientes.push({
       vacuna: "Rabia",
       motivo:
-        "Vacuna antirrábica pendiente.",
+        "Según edad, esquema y normativa.",
+      requiereDecisionMedica: true,
     });
   }
 
@@ -831,10 +1119,13 @@ function construirPendientesGato(
 async function calcularResumenVacunal(
   pacienteId: number,
 ): Promise<ResumenVacunal> {
-  const paciente = await getPatient(pacienteId);
+  const paciente =
+    await getPatient(pacienteId);
 
   if (!paciente) {
-    throw new Error("Paciente no encontrado.");
+    throw new Error(
+      "Paciente no encontrado.",
+    );
   }
 
   const vacunas = await db
@@ -847,7 +1138,9 @@ async function calcularResumenVacunal(
       ),
     )
     .orderBy(
-      desc(vacunacionesTable.fechaAplicacion),
+      desc(
+        vacunacionesTable.fechaAplicacion,
+      ),
     );
 
   const visitas = await db
@@ -860,71 +1153,99 @@ async function calcularResumenVacunal(
       ),
     )
     .orderBy(
-      desc(vacunacionVisitasTable.fechaVisita),
+      desc(
+        vacunacionVisitasTable.fechaVisita,
+      ),
     );
 
-  const [ultimaPruebaFelina] = await db
-    .select()
-    .from(pruebasFelinasTable)
-    .where(
-      eq(
-        pruebasFelinasTable.pacienteId,
-        pacienteId,
-      ),
-    )
-    .orderBy(
-      desc(pruebasFelinasTable.fechaPrueba),
-    )
-    .limit(1);
+  const [ultimaPruebaFelina] =
+    await db
+      .select()
+      .from(pruebasFelinasTable)
+      .where(
+        eq(
+          pruebasFelinasTable.pacienteId,
+          pacienteId,
+        ),
+      )
+      .orderBy(
+        desc(
+          pruebasFelinasTable.fechaPrueba,
+        ),
+      )
+      .limit(1);
 
-  const especie = normalizarEspecie(
-    paciente.especie,
-  );
+  const especie =
+    normalizarEspecie(
+      paciente.especie,
+    );
 
-  const edadMeses = calcularEdadMeses(
-    paciente.fechaNacimiento,
-  );
+  const edadMeses =
+    calcularEdadMeses(
+      paciente.fechaNacimiento,
+    );
 
-  const ultimaVacuna = vacunas[0] ?? null;
+  const ultimaVacuna =
+    vacunas.find(
+      (vacuna) =>
+        vacuna.estado === "Aplicada",
+    ) ?? null;
 
-  const etapa = determinarEtapa(
-    edadMeses,
-    ultimaVacuna?.etapa,
-  );
+  const etapa =
+    determinarEtapa(
+      edadMeses,
+      ultimaVacuna?.etapa,
+    );
 
   const intervaloDias =
     visitas[0]?.intervaloDias === 21
       ? 21
       : 15;
 
-  if (!especie || !etapa) {
+  if (
+    !especie ||
+    !etapa
+  ) {
     return {
       especie,
       etapa,
       intervaloDias,
-      estado: "Sin historial",
+
+      estado:
+        "Sin historial",
+
       fechaSugerida: null,
       diasDiferencia: null,
+
       vacunasSiguienteVisita: [],
+
       vacunasPendientesPosteriores: [],
+
       esquemaCompleto: false,
+
       advertencias: [
         "No fue posible determinar la especie o etapa de vida del paciente.",
       ],
     };
   }
 
-  const vacunasAplicadas = vacunas.filter(
-    (vacuna) =>
-      vacuna.estado === "Aplicada",
-  );
-
-  const aplicadasNormalizadas = new Set<string>();
-
-  for (const vacuna of vacunasAplicadas) {
-    const identificada = identificarVacuna(
-      vacuna.vacuna,
+  const vacunasAplicadas =
+    vacunas.filter(
+      (vacuna) =>
+        vacuna.estado === "Aplicada",
     );
+
+  const aplicadasNormalizadas =
+    new Set<string>();
+
+  for (
+    const vacuna
+    of vacunasAplicadas
+  ) {
+    const identificada =
+      identificarVacuna(
+        vacuna.vacuna,
+      );
 
     if (identificada) {
       aplicadasNormalizadas.add(
@@ -933,39 +1254,51 @@ async function calcularResumenVacunal(
     }
   }
 
-  let pendientes: VacunaSugerida[] = [];
-  let advertencias: string[] = [];
+  let pendientes:
+    VacunaSugerida[] = [];
+
+  let advertencias:
+    string[] = [];
 
   if (especie === "Perro") {
-    pendientes = construirPendientesPerro(
-      etapa,
-      aplicadasNormalizadas,
-    );
+    pendientes =
+      construirPendientesPerro(
+        etapa,
+        aplicadasNormalizadas,
+      );
   } else {
     const resultadoFelino =
       construirPendientesGato(
         etapa,
         aplicadasNormalizadas,
+
         ultimaPruebaFelina
           ? {
               resultadoFelv:
                 ultimaPruebaFelina.resultadoFelv,
+
               decisionLeucemia:
                 ultimaPruebaFelina.decisionLeucemia,
             }
           : null,
       );
 
-    pendientes = resultadoFelino.pendientes;
+    pendientes =
+      resultadoFelino.pendientes;
+
     advertencias =
       resultadoFelino.advertencias;
   }
 
+  /*
+   * Solamente una recomendación principal.
+   * Las demás quedan como pendientes posteriores.
+   */
   const vacunasSiguienteVisita =
-    pendientes.slice(0, 2);
+    pendientes.slice(0, 1);
 
   const vacunasPendientesPosteriores =
-    pendientes.slice(2);
+    pendientes.slice(1);
 
   const fechaBase =
     ultimaVacuna?.fechaAplicacion ??
@@ -973,28 +1306,30 @@ async function calcularResumenVacunal(
     null;
 
   const fechaSugerida =
-    pendientes.length > 0 && fechaBase
-      ? addDays(fechaBase, intervaloDias)
+    pendientes.length > 0 &&
+    fechaBase
+      ? addDays(
+          fechaBase,
+          intervaloDias,
+        )
       : pendientes.length > 0
-        ? new Date().toISOString().slice(0, 10)
+        ? fechaActualMexico()
         : null;
 
   const estadoFecha =
-    estadoPorFecha(fechaSugerida);
+    estadoPorFecha(
+      fechaSugerida,
+    );
 
-  const requiereDecision = pendientes.some(
-    (pendiente) =>
-      pendiente.requiereDecisionMedica,
-  );
+  const primeraPendiente =
+    vacunasSiguienteVisita[0];
 
-  const estado: EstadoCalculado =
+  const estado:
+    EstadoCalculado =
     pendientes.length === 0
       ? "Al corriente"
-      : requiereDecision &&
-          vacunasSiguienteVisita.every(
-            (vacuna) =>
-              vacuna.requiereDecisionMedica,
-          )
+      : primeraPendiente
+          ?.requiereDecisionMedica
         ? "Pendiente de decisión médica"
         : estadoFecha.estado;
 
@@ -1004,27 +1339,35 @@ async function calcularResumenVacunal(
     intervaloDias,
     estado,
     fechaSugerida,
+
     diasDiferencia:
       estadoFecha.diasDiferencia,
+
     vacunasSiguienteVisita,
+
     vacunasPendientesPosteriores,
+
     esquemaCompleto:
       pendientes.length === 0,
+
     advertencias,
   };
 }
 
 /* =========================================================
-   RESUMEN COMPLETO DE MEDICINA PREVENTIVA
+   RESUMEN DE MEDICINA PREVENTIVA
 ========================================================= */
 
-// GET /pacientes/:pacienteId/medicina-preventiva
 router.get(
   "/pacientes/:pacienteId/medicina-preventiva",
-  async (req, res): Promise<void> => {
-    const pacienteId = readId(
-      req.params.pacienteId,
-    );
+  async (
+    req,
+    res,
+  ): Promise<void> => {
+    const pacienteId =
+      readId(
+        req.params.pacienteId,
+      );
 
     if (!pacienteId) {
       res.status(400).json({
@@ -1034,16 +1377,23 @@ router.get(
       return;
     }
 
-    if (!(await patientExists(pacienteId))) {
+    if (
+      !(await patientExists(
+        pacienteId,
+      ))
+    ) {
       res.status(404).json({
-        error: "Paciente no encontrado.",
+        error:
+          "Paciente no encontrado.",
       });
       return;
     }
 
     const visitas = await db
       .select()
-      .from(vacunacionVisitasTable)
+      .from(
+        vacunacionVisitasTable,
+      )
       .where(
         eq(
           vacunacionVisitasTable.pacienteId,
@@ -1051,7 +1401,9 @@ router.get(
         ),
       )
       .orderBy(
-        desc(vacunacionVisitasTable.fechaVisita),
+        desc(
+          vacunacionVisitasTable.fechaVisita,
+        ),
       );
 
     const vacunas = await db
@@ -1064,49 +1416,70 @@ router.get(
         ),
       )
       .orderBy(
-        desc(vacunacionesTable.fechaAplicacion),
-      );
-
-    const desparasitaciones = await db
-      .select()
-      .from(desparasitacionesTable)
-      .where(
-        eq(
-          desparasitacionesTable.pacienteId,
-          pacienteId,
-        ),
-      )
-      .orderBy(
         desc(
-          desparasitacionesTable.fechaAplicacion,
+          vacunacionesTable.fechaAplicacion,
         ),
       );
 
-    const pruebasFelinas = await db
-      .select()
-      .from(pruebasFelinasTable)
-      .where(
-        eq(
-          pruebasFelinasTable.pacienteId,
-          pacienteId,
-        ),
-      )
-      .orderBy(
-        desc(pruebasFelinasTable.fechaPrueba),
+    const desparasitaciones =
+      await db
+        .select()
+        .from(
+          desparasitacionesTable,
+        )
+        .where(
+          eq(
+            desparasitacionesTable.pacienteId,
+            pacienteId,
+          ),
+        )
+        .orderBy(
+          desc(
+            desparasitacionesTable.fechaAplicacion,
+          ),
+        );
+
+    const pruebasFelinas =
+      await db
+        .select()
+        .from(
+          pruebasFelinasTable,
+        )
+        .where(
+          eq(
+            pruebasFelinasTable.pacienteId,
+            pacienteId,
+          ),
+        )
+        .orderBy(
+          desc(
+            pruebasFelinasTable.fechaPrueba,
+          ),
+        );
+
+    const visitasConVacunas =
+      visitas.map(
+        (visita) => ({
+          ...serializeVaccinationVisit(
+            visita,
+          ),
+
+          puedeEditar:
+            esFechaActual(
+              visita.fechaVisita,
+            ),
+
+          vacunas: vacunas
+            .filter(
+              (vacuna) =>
+                vacuna.visitaId ===
+                visita.id,
+            )
+            .map(
+              serializeVaccine,
+            ),
+        }),
       );
-
-    const visitasConVacunas = visitas.map(
-      (visita) => ({
-        ...serializeVaccinationVisit(visita),
-
-        vacunas: vacunas
-          .filter(
-            (vacuna) =>
-              vacuna.visitaId === visita.id,
-          )
-          .map(serializeVaccine),
-      }),
-    );
 
     const resumenVacunal =
       await calcularResumenVacunal(
@@ -1122,7 +1495,9 @@ router.get(
         visitasConVacunas,
 
       vacunaciones:
-        vacunas.map(serializeVaccine),
+        vacunas.map(
+          serializeVaccine,
+        ),
 
       desparasitaciones:
         desparasitaciones.map(
@@ -1137,13 +1512,16 @@ router.get(
   },
 );
 
-// GET /pacientes/:pacienteId/recomendacion-vacunal
 router.get(
   "/pacientes/:pacienteId/recomendacion-vacunal",
-  async (req, res): Promise<void> => {
-    const pacienteId = readId(
-      req.params.pacienteId,
-    );
+  async (
+    req,
+    res,
+  ): Promise<void> => {
+    const pacienteId =
+      readId(
+        req.params.pacienteId,
+      );
 
     if (!pacienteId) {
       res.status(400).json({
@@ -1153,9 +1531,14 @@ router.get(
       return;
     }
 
-    if (!(await patientExists(pacienteId))) {
+    if (
+      !(await patientExists(
+        pacienteId,
+      ))
+    ) {
       res.status(404).json({
-        error: "Paciente no encontrado.",
+        error:
+          "Paciente no encontrado.",
       });
       return;
     }
@@ -1170,16 +1553,19 @@ router.get(
 );
 
 /* =========================================================
-   VACUNACIONES
+   CREAR VISITA DE VACUNACIÓN
 ========================================================= */
 
-// POST /pacientes/:pacienteId/vacunaciones/visitas
 router.post(
   "/pacientes/:pacienteId/vacunaciones/visitas",
-  async (req, res): Promise<void> => {
-    const pacienteId = readId(
-      req.params.pacienteId,
-    );
+  async (
+    req,
+    res,
+  ): Promise<void> => {
+    const pacienteId =
+      readId(
+        req.params.pacienteId,
+      );
 
     if (!pacienteId) {
       res.status(400).json({
@@ -1196,47 +1582,39 @@ router.post(
 
     if (!parsed.success) {
       res.status(400).json({
-        error: parsed.error.message,
+        error:
+          parsed.error.message,
       });
       return;
     }
 
     const paciente =
-      await getPatient(pacienteId);
+      await getPatient(
+        pacienteId,
+      );
 
     if (!paciente) {
       res.status(404).json({
-        error: "Paciente no encontrado.",
+        error:
+          "Paciente no encontrado.",
       });
       return;
     }
 
-    const data = parsed.data;
+    const data =
+      parsed.data;
 
-    const especies = new Set(
-      data.vacunas.map(
-        (vacuna) => vacuna.especie,
-      ),
-    );
+    const errorVisita =
+      validarVacunasDeVisita(
+        data.vacunas,
+        normalizarEspecie(
+          paciente.especie,
+        ),
+      );
 
-    if (especies.size !== 1) {
+    if (errorVisita) {
       res.status(400).json({
-        error:
-          "Todas las vacunas de la visita deben corresponder a la misma especie.",
-      });
-      return;
-    }
-
-    const etapas = new Set(
-      data.vacunas.map(
-        (vacuna) => vacuna.etapa,
-      ),
-    );
-
-    if (etapas.size !== 1) {
-      res.status(400).json({
-        error:
-          "Todas las vacunas de la visita deben corresponder a la misma etapa.",
+        error: errorVisita,
       });
       return;
     }
@@ -1247,20 +1625,6 @@ router.post(
     const etapa =
       data.vacunas[0]?.etapa;
 
-    const especiePaciente =
-      normalizarEspecie(paciente.especie);
-
-    if (
-      especiePaciente &&
-      especiePaciente !== especie
-    ) {
-      res.status(400).json({
-        error:
-          "La especie seleccionada no coincide con la especie registrada del paciente.",
-      });
-      return;
-    }
-
     if (
       especie === "Gato" &&
       etapa === "Cachorro"
@@ -1268,17 +1632,22 @@ router.post(
       const vacunasFelinasPrevias =
         await db
           .select({
-            id: vacunacionesTable.id,
+            id:
+              vacunacionesTable.id,
+
             estado:
               vacunacionesTable.estado,
           })
-          .from(vacunacionesTable)
+          .from(
+            vacunacionesTable,
+          )
           .where(
             and(
               eq(
                 vacunacionesTable.pacienteId,
                 pacienteId,
               ),
+
               eq(
                 vacunacionesTable.especie,
                 "Gato",
@@ -1289,10 +1658,13 @@ router.post(
       const tieneAplicacionesPrevias =
         vacunasFelinasPrevias.some(
           (vacuna) =>
-            vacuna.estado === "Aplicada",
+            vacuna.estado ===
+            "Aplicada",
         );
 
-      if (!tieneAplicacionesPrevias) {
+      if (
+        !tieneAplicacionesPrevias
+      ) {
         const primeraVacuna =
           data.vacunas[0];
 
@@ -1317,118 +1689,445 @@ router.post(
       }
     }
 
-    const incluyeLeucemia =
-      data.vacunas.some(
-        (vacuna) =>
-          identificarVacuna(
-            vacuna.vacuna,
-          ) === "Leucemia felina",
+    const errorLeucemia =
+      await validarLeucemiaFelina(
+        pacienteId,
+        data.vacunas,
       );
 
-    if (incluyeLeucemia) {
-      const [ultimaPrueba] = await db
-        .select()
-        .from(pruebasFelinasTable)
-        .where(
-          eq(
-            pruebasFelinasTable.pacienteId,
-            pacienteId,
-          ),
-        )
-        .orderBy(
-          desc(
-            pruebasFelinasTable.fechaPrueba,
-          ),
-        )
-        .limit(1);
-
-      if (!ultimaPrueba) {
-        res.status(400).json({
-          error:
-            "Para registrar la vacuna contra leucemia felina debe existir una prueba FIV/FeLV previa.",
-        });
-        return;
-      }
-
-      if (
-        ultimaPrueba.resultadoFelv !==
-        "Negativo"
-      ) {
-        res.status(400).json({
-          error:
-            "La última prueba FeLV registrada no tiene resultado negativo.",
-        });
-        return;
-      }
-
-      if (
-        ultimaPrueba.decisionLeucemia !==
-        "Aplicar"
-      ) {
-        res.status(400).json({
-          error:
-            "La última prueba felina no tiene registrada la decisión médica de aplicar leucemia.",
-        });
-        return;
-      }
+    if (errorLeucemia) {
+      res.status(400).json({
+        error: errorLeucemia,
+      });
+      return;
     }
 
-    const result = await db.transaction(
-      async (transaction) => {
-        const [visita] =
-          await transaction
-            .insert(
-              vacunacionVisitasTable,
-            )
-            .values({
-              pacienteId,
-              consultaId:
-                data.consultaId,
+    /*
+     * La fecha real de aplicación se genera
+     * exclusivamente en el servidor.
+     * Nunca se acepta la fecha enviada por el frontend.
+     */
+    const fechaAplicacion =
+      fechaActualMexico();
 
-              fechaVisita:
-                data.fechaVisita,
+    const result =
+      await db.transaction(
+        async (
+          transaction,
+        ) => {
+          const [visita] =
+            await transaction
+              .insert(
+                vacunacionVisitasTable,
+              )
+              .values({
+                pacienteId,
 
-              intervaloDias:
-                data.intervaloDias,
+                consultaId:
+                  data.consultaId,
 
-              origen:
-                data.origen ??
-                "Clinica",
+                fechaVisita:
+                  fechaAplicacion,
 
-              medicoResponsable:
-                data.medicoResponsable ||
-                null,
+                intervaloDias:
+                  data.intervaloDias,
 
-              clinicaExterna:
-                data.clinicaExterna ||
-                null,
+                origen:
+                  data.origen ??
+                  "Clinica",
 
-              medicoExterno:
-                data.medicoExterno ||
-                null,
+                medicoResponsable:
+                  data.medicoResponsable ||
+                  null,
 
-              comprobantePresentado:
-                data.comprobantePresentado ??
-                false,
+                clinicaExterna:
+                  data.clinicaExterna ||
+                  null,
 
-              observaciones:
-                data.observaciones ||
-                null,
-            })
-            .returning();
+                medicoExterno:
+                  data.medicoExterno ||
+                  null,
 
-        if (!visita) {
-          throw new Error(
-            "No se pudo crear la visita de vacunación.",
-          );
-        }
+                comprobantePresentado:
+                  data.comprobantePresentado ??
+                  false,
 
-        const aplicaciones =
-          data.vacunas.map(
-            (vacuna) => ({
-              visitaId: visita.id,
-              pacienteId,
+                observaciones:
+                  data.observaciones ||
+                  null,
+              })
+              .returning();
 
+          if (!visita) {
+            throw new Error(
+              "No se pudo crear la visita de vacunación.",
+            );
+          }
+
+          const aplicaciones =
+            data.vacunas.map(
+              (vacuna) => ({
+                visitaId:
+                  visita.id,
+
+                pacienteId,
+
+                vacuna:
+                  vacuna.vacuna.trim(),
+
+                especie:
+                  vacuna.especie,
+
+                etapa:
+                  vacuna.etapa,
+
+                marca:
+                  vacuna.marca ||
+                  null,
+
+                laboratorio:
+                  vacuna.laboratorio ||
+                  null,
+
+                lote:
+                  vacuna.lote ||
+                  null,
+
+                fechaCaducidad:
+                  vacuna.fechaCaducidad ||
+                  null,
+
+                fechaAplicacion,
+
+                fechaVencimiento:
+                  vacuna.fechaVencimiento ||
+                  null,
+
+                proximaAplicacion:
+                  vacuna.proximaAplicacion ||
+                  (data.intervaloDias
+                    ? addDays(
+                        fechaAplicacion,
+                        data.intervaloDias,
+                      )
+                    : null),
+
+                estado:
+                  vacuna.estado ??
+                  "Aplicada",
+
+                decisionMedica:
+                  vacuna.decisionMedica ||
+                  null,
+
+                motivoDecision:
+                  vacuna.motivoDecision ||
+                  null,
+
+                tipoRegistro:
+                  vacuna.tipoRegistro ??
+                  "Aplicacion",
+
+                reaccionAdversa:
+                  vacuna.reaccionAdversa ??
+                  false,
+
+                descripcionReaccion:
+                  vacuna.descripcionReaccion ||
+                  null,
+
+                observaciones:
+                  vacuna.observaciones ||
+                  null,
+              }),
+            );
+
+          const vacunasCreadas =
+            await transaction
+              .insert(
+                vacunacionesTable,
+              )
+              .values(
+                aplicaciones,
+              )
+              .returning();
+
+          return {
+            visita,
+            vacunas:
+              vacunasCreadas,
+          };
+        },
+      );
+
+    const resumenVacunal =
+      await calcularResumenVacunal(
+        pacienteId,
+      );
+
+    res.status(201).json({
+      visita: {
+        ...serializeVaccinationVisit(
+          result.visita,
+        ),
+
+        puedeEditar: true,
+      },
+
+      vacunas:
+        result.vacunas.map(
+          serializeVaccine,
+        ),
+
+      resumenVacunal,
+    });
+  },
+);
+
+/* =========================================================
+   EDITAR VISITA COMPLETA DE VACUNACIÓN
+   SOLO EL MISMO DÍA
+========================================================= */
+
+router.put(
+  "/vacunaciones/visitas/:visitaId",
+  async (
+    req,
+    res,
+  ): Promise<void> => {
+    const visitaId =
+      readId(
+        req.params.visitaId,
+      );
+
+    if (!visitaId) {
+      res.status(400).json({
+        error:
+          "Identificador de visita de vacunación inválido.",
+      });
+      return;
+    }
+
+    const parsed =
+      actualizarVisitaVacunacionSchema.safeParse(
+        req.body,
+      );
+
+    if (!parsed.success) {
+      res.status(400).json({
+        error:
+          parsed.error.message,
+      });
+      return;
+    }
+
+    const [visitaActual] =
+      await db
+        .select()
+        .from(
+          vacunacionVisitasTable,
+        )
+        .where(
+          eq(
+            vacunacionVisitasTable.id,
+            visitaId,
+          ),
+        );
+
+    if (!visitaActual) {
+      res.status(404).json({
+        error:
+          "Visita de vacunación no encontrada.",
+      });
+      return;
+    }
+
+    /*
+     * Ningún dato puede editarse
+     * después del día de aplicación.
+     */
+    if (
+      !esFechaActual(
+        visitaActual.fechaVisita,
+      )
+    ) {
+      res.status(403).json({
+        error:
+          "Este registro ya no puede editarse porque no fue creado el día de hoy.",
+      });
+      return;
+    }
+
+    const data =
+      parsed.data;
+
+    const paciente =
+      await getPatient(
+        visitaActual.pacienteId,
+      );
+
+    if (!paciente) {
+      res.status(404).json({
+        error:
+          "Paciente no encontrado.",
+      });
+      return;
+    }
+
+    const errorVisita =
+      validarVacunasDeVisita(
+        data.vacunas,
+        normalizarEspecie(
+          paciente.especie,
+        ),
+      );
+
+    if (errorVisita) {
+      res.status(400).json({
+        error: errorVisita,
+      });
+      return;
+    }
+
+    const errorLeucemia =
+      await validarLeucemiaFelina(
+        visitaActual.pacienteId,
+        data.vacunas,
+      );
+
+    if (errorLeucemia) {
+      res.status(400).json({
+        error: errorLeucemia,
+      });
+      return;
+    }
+
+    const fechaAplicacion =
+      visitaActual.fechaVisita.slice(
+        0,
+        10,
+      );
+
+    const result =
+      await db.transaction(
+        async (
+          transaction,
+        ) => {
+          const [visitaActualizada] =
+            await transaction
+              .update(
+                vacunacionVisitasTable,
+              )
+              .set({
+                consultaId:
+                  data.consultaId,
+
+                /*
+                 * fechaVisita no se actualiza.
+                 */
+
+                intervaloDias:
+                  data.intervaloDias,
+
+                origen:
+                  data.origen ??
+                  visitaActual.origen,
+
+                medicoResponsable:
+                  data.medicoResponsable ||
+                  null,
+
+                clinicaExterna:
+                  data.clinicaExterna ||
+                  null,
+
+                medicoExterno:
+                  data.medicoExterno ||
+                  null,
+
+                comprobantePresentado:
+                  data.comprobantePresentado ??
+                  false,
+
+                observaciones:
+                  data.observaciones ||
+                  null,
+
+                actualizadoEn:
+                  new Date(),
+              })
+              .where(
+                eq(
+                  vacunacionVisitasTable.id,
+                  visitaId,
+                ),
+              )
+              .returning();
+
+          if (!visitaActualizada) {
+            throw new Error(
+              "No se pudo actualizar la visita.",
+            );
+          }
+
+          const vacunasExistentes =
+            await transaction
+              .select()
+              .from(
+                vacunacionesTable,
+              )
+              .where(
+                eq(
+                  vacunacionesTable.visitaId,
+                  visitaId,
+                ),
+              );
+
+          const idsRecibidos =
+            new Set(
+              data.vacunas
+                .map(
+                  (vacuna) =>
+                    vacuna.id,
+                )
+                .filter(
+                  (
+                    id,
+                  ): id is number =>
+                    typeof id ===
+                    "number",
+                ),
+            );
+
+          for (
+            const vacunaExistente
+            of vacunasExistentes
+          ) {
+            if (
+              !idsRecibidos.has(
+                vacunaExistente.id,
+              )
+            ) {
+              await transaction
+                .delete(
+                  vacunacionesTable,
+                )
+                .where(
+                  eq(
+                    vacunacionesTable.id,
+                    vacunaExistente.id,
+                  ),
+                );
+            }
+          }
+
+          const vacunasResultado = [];
+
+          for (
+            const vacuna
+            of data.vacunas
+          ) {
+            const valores = {
               vacuna:
                 vacuna.vacuna.trim(),
 
@@ -1439,21 +2138,25 @@ router.post(
                 vacuna.etapa,
 
               marca:
-                vacuna.marca || null,
+                vacuna.marca ||
+                null,
 
               laboratorio:
                 vacuna.laboratorio ||
                 null,
 
               lote:
-                vacuna.lote || null,
+                vacuna.lote ||
+                null,
 
               fechaCaducidad:
                 vacuna.fechaCaducidad ||
                 null,
 
-              fechaAplicacion:
-                vacuna.fechaAplicacion,
+              /*
+               * fechaAplicacion nunca se cambia.
+               */
+              fechaAplicacion,
 
               fechaVencimiento:
                 vacuna.fechaVencimiento ||
@@ -1463,7 +2166,7 @@ router.post(
                 vacuna.proximaAplicacion ||
                 (data.intervaloDias
                   ? addDays(
-                      vacuna.fechaAplicacion,
+                      fechaAplicacion,
                       data.intervaloDias,
                     )
                   : null),
@@ -1495,32 +2198,93 @@ router.post(
               observaciones:
                 vacuna.observaciones ||
                 null,
-            }),
-          );
 
-        const vacunasCreadas =
-          await transaction
-            .insert(vacunacionesTable)
-            .values(aplicaciones)
-            .returning();
+              actualizadoEn:
+                new Date(),
+            };
 
-        return {
-          visita,
-          vacunas: vacunasCreadas,
-        };
-      },
-    );
+            if (vacuna.id) {
+              const pertenece =
+                vacunasExistentes.some(
+                  (existente) =>
+                    existente.id ===
+                      vacuna.id &&
+                    existente.visitaId ===
+                      visitaId,
+                );
+
+              if (!pertenece) {
+                throw new Error(
+                  "Una de las vacunas no pertenece a esta visita.",
+                );
+              }
+
+              const [actualizada] =
+                await transaction
+                  .update(
+                    vacunacionesTable,
+                  )
+                  .set(valores)
+                  .where(
+                    eq(
+                      vacunacionesTable.id,
+                      vacuna.id,
+                    ),
+                  )
+                  .returning();
+
+              if (actualizada) {
+                vacunasResultado.push(
+                  actualizada,
+                );
+              }
+            } else {
+              const [creada] =
+                await transaction
+                  .insert(
+                    vacunacionesTable,
+                  )
+                  .values({
+                    ...valores,
+
+                    visitaId,
+
+                    pacienteId:
+                      visitaActual.pacienteId,
+                  })
+                  .returning();
+
+              if (creada) {
+                vacunasResultado.push(
+                  creada,
+                );
+              }
+            }
+          }
+
+          return {
+            visita:
+              visitaActualizada,
+
+            vacunas:
+              vacunasResultado,
+          };
+        },
+      );
 
     const resumenVacunal =
       await calcularResumenVacunal(
-        pacienteId,
+        visitaActual.pacienteId,
       );
 
-    res.status(201).json({
-      visita:
-        serializeVaccinationVisit(
+    res.json({
+      visita: {
+        ...serializeVaccinationVisit(
           result.visita,
         ),
+
+        puedeEditar: true,
+      },
 
       vacunas:
         result.vacunas.map(
@@ -1532,13 +2296,21 @@ router.post(
   },
 );
 
-// PUT /vacunaciones/:vacunacionId
+/* =========================================================
+   EDITAR VACUNA INDIVIDUAL
+   COMPATIBILIDAD CON FRONTEND ANTERIOR
+========================================================= */
+
 router.put(
   "/vacunaciones/:vacunacionId",
-  async (req, res): Promise<void> => {
-    const vacunacionId = readId(
-      req.params.vacunacionId,
-    );
+  async (
+    req,
+    res,
+  ): Promise<void> => {
+    const vacunacionId =
+      readId(
+        req.params.vacunacionId,
+      );
 
     if (!vacunacionId) {
       res.status(400).json({
@@ -1555,24 +2327,86 @@ router.put(
 
     if (!parsed.success) {
       res.status(400).json({
-        error: parsed.error.message,
+        error:
+          parsed.error.message,
       });
       return;
     }
 
-    const [updated] = await db
-      .update(vacunacionesTable)
-      .set({
-        ...parsed.data,
-        actualizadoEn: new Date(),
-      })
-      .where(
-        eq(
-          vacunacionesTable.id,
-          vacunacionId,
-        ),
+    const [vacunaActual] =
+      await db
+        .select()
+        .from(
+          vacunacionesTable,
+        )
+        .where(
+          eq(
+            vacunacionesTable.id,
+            vacunacionId,
+          ),
+        );
+
+    if (!vacunaActual) {
+      res.status(404).json({
+        error:
+          "Vacunación no encontrada.",
+      });
+      return;
+    }
+
+    const [visita] =
+      await db
+        .select()
+        .from(
+          vacunacionVisitasTable,
+        )
+        .where(
+          eq(
+            vacunacionVisitasTable.id,
+            vacunaActual.visitaId,
+          ),
+        );
+
+    if (
+      !visita ||
+      !esFechaActual(
+        visita.fechaVisita,
       )
-      .returning();
+    ) {
+      res.status(403).json({
+        error:
+          "Este registro ya no puede editarse porque no fue creado el día de hoy.",
+      });
+      return;
+    }
+
+    const data =
+      parsed.data;
+
+    /*
+     * La fecha no forma parte de vacunaBaseSchema,
+     * por lo que nunca puede modificarse.
+     */
+    const [updated] =
+      await db
+        .update(
+          vacunacionesTable,
+        )
+        .set({
+          ...data,
+
+          id: undefined,
+
+          actualizadoEn:
+            new Date(),
+        })
+        .where(
+          eq(
+            vacunacionesTable.id,
+            vacunacionId,
+          ),
+        )
+        .returning();
 
     if (!updated) {
       res.status(404).json({
@@ -1588,13 +2422,20 @@ router.put(
   },
 );
 
-// DELETE /vacunaciones/:vacunacionId
+/* =========================================================
+   ELIMINAR VACUNACIÓN
+========================================================= */
+
 router.delete(
   "/vacunaciones/:vacunacionId",
-  async (req, res): Promise<void> => {
-    const vacunacionId = readId(
-      req.params.vacunacionId,
-    );
+  async (
+    req,
+    res,
+  ): Promise<void> => {
+    const vacunacionId =
+      readId(
+        req.params.vacunacionId,
+      );
 
     if (!vacunacionId) {
       res.status(400).json({
@@ -1604,17 +2445,20 @@ router.delete(
       return;
     }
 
-    const [deleted] = await db
-      .delete(vacunacionesTable)
-      .where(
-        eq(
-          vacunacionesTable.id,
-          vacunacionId,
-        ),
-      )
-      .returning();
+    const [vacunaActual] =
+      await db
+        .select()
+        .from(
+          vacunacionesTable,
+        )
+        .where(
+          eq(
+            vacunacionesTable.id,
+            vacunacionId,
+          ),
+        );
 
-    if (!deleted) {
+    if (!vacunaActual) {
       res.status(404).json({
         error:
           "Vacunación no encontrada.",
@@ -1622,17 +2466,57 @@ router.delete(
       return;
     }
 
+    const [visita] =
+      await db
+        .select()
+        .from(
+          vacunacionVisitasTable,
+        )
+        .where(
+          eq(
+            vacunacionVisitasTable.id,
+            vacunaActual.visitaId,
+          ),
+        );
+
+    if (
+      !visita ||
+      !esFechaActual(
+        visita.fechaVisita,
+      )
+    ) {
+      res.status(403).json({
+        error:
+          "Este registro ya no puede eliminarse porque no fue creado el día de hoy.",
+      });
+      return;
+    }
+
+    await db
+      .delete(
+        vacunacionesTable,
+      )
+      .where(
+        eq(
+          vacunacionesTable.id,
+          vacunacionId,
+        ),
+      );
+
     res.status(204).send();
   },
 );
 
-// DELETE /vacunaciones/visitas/:visitaId
 router.delete(
   "/vacunaciones/visitas/:visitaId",
-  async (req, res): Promise<void> => {
-    const visitaId = readId(
-      req.params.visitaId,
-    );
+  async (
+    req,
+    res,
+  ): Promise<void> => {
+    const visitaId =
+      readId(
+        req.params.visitaId,
+      );
 
     if (!visitaId) {
       res.status(400).json({
@@ -1642,23 +2526,66 @@ router.delete(
       return;
     }
 
-    const [deleted] = await db
-      .delete(vacunacionVisitasTable)
-      .where(
-        eq(
-          vacunacionVisitasTable.id,
-          visitaId,
-        ),
-      )
-      .returning();
+    const [visita] =
+      await db
+        .select()
+        .from(
+          vacunacionVisitasTable,
+        )
+        .where(
+          eq(
+            vacunacionVisitasTable.id,
+            visitaId,
+          ),
+        );
 
-    if (!deleted) {
+    if (!visita) {
       res.status(404).json({
         error:
           "Visita de vacunación no encontrada.",
       });
       return;
     }
+
+    if (
+      !esFechaActual(
+        visita.fechaVisita,
+      )
+    ) {
+      res.status(403).json({
+        error:
+          "Este registro ya no puede eliminarse porque no fue creado el día de hoy.",
+      });
+      return;
+    }
+
+    await db.transaction(
+      async (
+        transaction,
+      ) => {
+        await transaction
+          .delete(
+            vacunacionesTable,
+          )
+          .where(
+            eq(
+              vacunacionesTable.visitaId,
+              visitaId,
+            ),
+          );
+
+        await transaction
+          .delete(
+            vacunacionVisitasTable,
+          )
+          .where(
+            eq(
+              vacunacionVisitasTable.id,
+              visitaId,
+            ),
+          );
+      },
+    );
 
     res.status(204).send();
   },
@@ -1668,13 +2595,16 @@ router.delete(
    DESPARASITACIONES
 ========================================================= */
 
-// POST /pacientes/:pacienteId/desparasitaciones
 router.post(
   "/pacientes/:pacienteId/desparasitaciones",
-  async (req, res): Promise<void> => {
-    const pacienteId = readId(
-      req.params.pacienteId,
-    );
+  async (
+    req,
+    res,
+  ): Promise<void> => {
+    const pacienteId =
+      readId(
+        req.params.pacienteId,
+      );
 
     if (!pacienteId) {
       res.status(400).json({
@@ -1691,19 +2621,26 @@ router.post(
 
     if (!parsed.success) {
       res.status(400).json({
-        error: parsed.error.message,
+        error:
+          parsed.error.message,
       });
       return;
     }
 
-    if (!(await patientExists(pacienteId))) {
+    if (
+      !(await patientExists(
+        pacienteId,
+      ))
+    ) {
       res.status(404).json({
-        error: "Paciente no encontrado.",
+        error:
+          "Paciente no encontrado.",
       });
       return;
     }
 
-    const data = parsed.data;
+    const data =
+      parsed.data;
 
     if (
       data.programarProxima &&
@@ -1737,106 +2674,110 @@ router.post(
           )
         : null);
 
-    const [created] = await db
-      .insert(
-        desparasitacionesTable,
-      )
-      .values({
-        pacienteId,
+    const [created] =
+      await db
+        .insert(
+          desparasitacionesTable,
+        )
+        .values({
+          pacienteId,
 
-        consultaId:
-          data.consultaId,
+          consultaId:
+            data.consultaId,
 
-        fechaAplicacion:
-          data.fechaAplicacion,
+          fechaAplicacion:
+            data.fechaAplicacion,
 
-        producto:
-          data.producto.trim(),
+          producto:
+            data.producto.trim(),
 
-        principioActivo:
-          data.principioActivo ||
-          null,
+          principioActivo:
+            data.principioActivo ||
+            null,
 
-        lote:
-          data.lote || null,
+          lote:
+            data.lote ||
+            null,
 
-        fabricante:
-          data.fabricante || null,
+          fabricante:
+            data.fabricante ||
+            null,
 
-        origen:
-          data.origen ?? "Clinica",
+          origen:
+            data.origen ??
+            "Clinica",
 
-        clinicaExterna:
-          data.clinicaExterna ||
-          null,
+          clinicaExterna:
+            data.clinicaExterna ||
+            null,
 
-        medicoResponsable:
-          data.medicoResponsable ||
-          null,
+          medicoResponsable:
+            data.medicoResponsable ||
+            null,
 
-        cubreInternos:
-          data.cubreInternos ??
-          false,
+          cubreInternos:
+            data.cubreInternos ??
+            false,
 
-        cubreExternos:
-          data.cubreExternos ??
-          false,
+          cubreExternos:
+            data.cubreExternos ??
+            false,
 
-        duracionDias:
-          data.duracionDias,
+          duracionDias:
+            data.duracionDias,
 
-        frecuenciaDias:
-          data.frecuenciaDias,
+          frecuenciaDias:
+            data.frecuenciaDias,
 
-        proximaAplicacion,
+          proximaAplicacion,
 
-        programarProxima:
-          data.programarProxima ??
-          false,
+          programarProxima:
+            data.programarProxima ??
+            false,
 
-        tipoProgramacion:
-          data.programarProxima
-            ? data.tipoProgramacion ||
-              null
-            : null,
+          tipoProgramacion:
+            data.programarProxima
+              ? data.tipoProgramacion ||
+                null
+              : null,
 
-        proximoProductoTipo:
-          data.programarProxima
-            ? data.proximoProductoTipo ||
-              "Por decidir"
-            : null,
+          proximoProductoTipo:
+            data.programarProxima
+              ? data.proximoProductoTipo ||
+                "Por decidir"
+              : null,
 
-        proximoProducto:
-          data.programarProxima
-            ? data.proximoProducto ||
-              null
-            : null,
+          proximoProducto:
+            data.programarProxima
+              ? data.proximoProducto ||
+                null
+              : null,
 
-        decisionMedica:
-          data.programarProxima
-            ? data.decisionMedica ||
-              null
-            : null,
+          decisionMedica:
+            data.programarProxima
+              ? data.decisionMedica ||
+                null
+              : null,
 
-        fechaFinCobertura,
+          fechaFinCobertura,
 
-        pesoAplicacion:
-          data.pesoAplicacion ||
-          null,
+          pesoAplicacion:
+            data.pesoAplicacion ||
+            null,
 
-        observaciones:
-          data.observaciones ||
-          null,
+          observaciones:
+            data.observaciones ||
+            null,
 
-        comprobantePresentado:
-          data.comprobantePresentado ??
-          false,
+          comprobantePresentado:
+            data.comprobantePresentado ??
+            false,
 
-        archivoComprobante:
-          data.archivoComprobante ||
-          null,
-      })
-      .returning();
+          archivoComprobante:
+            data.archivoComprobante ||
+            null,
+        })
+        .returning();
 
     if (!created) {
       res.status(500).json({
@@ -1847,18 +2788,23 @@ router.post(
     }
 
     res.status(201).json(
-      serializeDeworming(created),
+      serializeDeworming(
+        created,
+      ),
     );
   },
 );
 
-// PUT /desparasitaciones/:desparasitacionId
 router.put(
   "/desparasitaciones/:desparasitacionId",
-  async (req, res): Promise<void> => {
-    const desparasitacionId = readId(
-      req.params.desparasitacionId,
-    );
+  async (
+    req,
+    res,
+  ): Promise<void> => {
+    const desparasitacionId =
+      readId(
+        req.params.desparasitacionId,
+      );
 
     if (!desparasitacionId) {
       res.status(400).json({
@@ -1875,7 +2821,8 @@ router.put(
 
     if (!parsed.success) {
       res.status(400).json({
-        error: parsed.error.message,
+        error:
+          parsed.error.message,
       });
       return;
     }
@@ -1918,21 +2865,23 @@ router.put(
           : parsed.data
               .decisionMedica,
 
-      actualizadoEn: new Date(),
+      actualizadoEn:
+        new Date(),
     };
 
-    const [updated] = await db
-      .update(
-        desparasitacionesTable,
-      )
-      .set(cambios)
-      .where(
-        eq(
-          desparasitacionesTable.id,
-          desparasitacionId,
-        ),
-      )
-      .returning();
+    const [updated] =
+      await db
+        .update(
+          desparasitacionesTable,
+        )
+        .set(cambios)
+        .where(
+          eq(
+            desparasitacionesTable.id,
+            desparasitacionId,
+          ),
+        )
+        .returning();
 
     if (!updated) {
       res.status(404).json({
@@ -1943,18 +2892,23 @@ router.put(
     }
 
     res.json(
-      serializeDeworming(updated),
+      serializeDeworming(
+        updated,
+      ),
     );
   },
 );
 
-// DELETE /desparasitaciones/:desparasitacionId
 router.delete(
   "/desparasitaciones/:desparasitacionId",
-  async (req, res): Promise<void> => {
-    const desparasitacionId = readId(
-      req.params.desparasitacionId,
-    );
+  async (
+    req,
+    res,
+  ): Promise<void> => {
+    const desparasitacionId =
+      readId(
+        req.params.desparasitacionId,
+      );
 
     if (!desparasitacionId) {
       res.status(400).json({
@@ -1964,17 +2918,18 @@ router.delete(
       return;
     }
 
-    const [deleted] = await db
-      .delete(
-        desparasitacionesTable,
-      )
-      .where(
-        eq(
-          desparasitacionesTable.id,
-          desparasitacionId,
-        ),
-      )
-      .returning();
+    const [deleted] =
+      await db
+        .delete(
+          desparasitacionesTable,
+        )
+        .where(
+          eq(
+            desparasitacionesTable.id,
+            desparasitacionId,
+          ),
+        )
+        .returning();
 
     if (!deleted) {
       res.status(404).json({
@@ -1989,16 +2944,19 @@ router.delete(
 );
 
 /* =========================================================
-   PRUEBAS FELINAS FIV / FeLV
+   PRUEBAS FELINAS
 ========================================================= */
 
-// POST /pacientes/:pacienteId/pruebas-felinas
 router.post(
   "/pacientes/:pacienteId/pruebas-felinas",
-  async (req, res): Promise<void> => {
-    const pacienteId = readId(
-      req.params.pacienteId,
-    );
+  async (
+    req,
+    res,
+  ): Promise<void> => {
+    const pacienteId =
+      readId(
+        req.params.pacienteId,
+      );
 
     if (!pacienteId) {
       res.status(400).json({
@@ -2015,91 +2973,103 @@ router.post(
 
     if (!parsed.success) {
       res.status(400).json({
-        error: parsed.error.message,
+        error:
+          parsed.error.message,
       });
       return;
     }
 
-    if (!(await patientExists(pacienteId))) {
-      res.status(404).json({
-        error: "Paciente no encontrado.",
-      });
-      return;
-    }
-
-    const data = parsed.data;
-
-    const [created] = await db
-      .insert(pruebasFelinasTable)
-      .values({
+    if (
+      !(await patientExists(
         pacienteId,
+      ))
+    ) {
+      res.status(404).json({
+        error:
+          "Paciente no encontrado.",
+      });
+      return;
+    }
 
-        consultaId:
-          data.consultaId,
+    const data =
+      parsed.data;
 
-        fechaPrueba:
-          data.fechaPrueba,
+    const [created] =
+      await db
+        .insert(
+          pruebasFelinasTable,
+        )
+        .values({
+          pacienteId,
 
-        fechaResultado:
-          data.fechaResultado ||
-          null,
+          consultaId:
+            data.consultaId,
 
-        origen:
-          data.origen ?? "Clinica",
+          fechaPrueba:
+            data.fechaPrueba,
 
-        tipoPrueba:
-          data.tipoPrueba ??
-          "FIV/FeLV",
+          fechaResultado:
+            data.fechaResultado ||
+            null,
 
-        laboratorio:
-          data.laboratorio || null,
+          origen:
+            data.origen ??
+            "Clinica",
 
-        clinicaExterna:
-          data.clinicaExterna ||
-          null,
+          tipoPrueba:
+            data.tipoPrueba ??
+            "FIV/FeLV",
 
-        medicoResponsable:
-          data.medicoResponsable ||
-          null,
+          laboratorio:
+            data.laboratorio ||
+            null,
 
-        medicoExterno:
-          data.medicoExterno ||
-          null,
+          clinicaExterna:
+            data.clinicaExterna ||
+            null,
 
-        resultadoFiv:
-          data.resultadoFiv,
+          medicoResponsable:
+            data.medicoResponsable ||
+            null,
 
-        resultadoFelv:
-          data.resultadoFelv,
+          medicoExterno:
+            data.medicoExterno ||
+            null,
 
-        comprobantePresentado:
-          data.comprobantePresentado ??
-          false,
+          resultadoFiv:
+            data.resultadoFiv,
 
-        archivoResultado:
-          data.archivoResultado ||
-          null,
+          resultadoFelv:
+            data.resultadoFelv,
 
-        edadMeses:
-          data.edadMeses,
+          comprobantePresentado:
+            data.comprobantePresentado ??
+            false,
 
-        decisionLeucemia:
-          data.decisionLeucemia ??
-          "Pendiente",
+          archivoResultado:
+            data.archivoResultado ||
+            null,
 
-        motivoDecision:
-          data.motivoDecision ||
-          null,
+          edadMeses:
+            data.edadMeses,
 
-        fechaReevaluacion:
-          data.fechaReevaluacion ||
-          null,
+          decisionLeucemia:
+            data.decisionLeucemia ??
+            "Pendiente",
 
-        observaciones:
-          data.observaciones ||
-          null,
-      })
-      .returning();
+          motivoDecision:
+            data.motivoDecision ||
+            null,
+
+          fechaReevaluacion:
+            data.fechaReevaluacion ||
+            null,
+
+          observaciones:
+            data.observaciones ||
+            null,
+        })
+        .returning();
 
     if (!created) {
       res.status(500).json({
@@ -2110,18 +3080,23 @@ router.post(
     }
 
     res.status(201).json(
-      serializeFelineTest(created),
+      serializeFelineTest(
+        created,
+      ),
     );
   },
 );
 
-// PUT /pruebas-felinas/:pruebaFelinaId
 router.put(
   "/pruebas-felinas/:pruebaFelinaId",
-  async (req, res): Promise<void> => {
-    const pruebaFelinaId = readId(
-      req.params.pruebaFelinaId,
-    );
+  async (
+    req,
+    res,
+  ): Promise<void> => {
+    const pruebaFelinaId =
+      readId(
+        req.params.pruebaFelinaId,
+      );
 
     if (!pruebaFelinaId) {
       res.status(400).json({
@@ -2138,24 +3113,30 @@ router.put(
 
     if (!parsed.success) {
       res.status(400).json({
-        error: parsed.error.message,
+        error:
+          parsed.error.message,
       });
       return;
     }
 
-    const [updated] = await db
-      .update(pruebasFelinasTable)
-      .set({
-        ...parsed.data,
-        actualizadoEn: new Date(),
-      })
-      .where(
-        eq(
-          pruebasFelinasTable.id,
-          pruebaFelinaId,
-        ),
-      )
-      .returning();
+    const [updated] =
+      await db
+        .update(
+          pruebasFelinasTable,
+        )
+        .set({
+          ...parsed.data,
+
+          actualizadoEn:
+            new Date(),
+        })
+        .where(
+          eq(
+            pruebasFelinasTable.id,
+            pruebaFelinaId,
+          ),
+        )
+        .returning();
 
     if (!updated) {
       res.status(404).json({
@@ -2166,18 +3147,23 @@ router.put(
     }
 
     res.json(
-      serializeFelineTest(updated),
+      serializeFelineTest(
+        updated,
+      ),
     );
   },
 );
 
-// DELETE /pruebas-felinas/:pruebaFelinaId
 router.delete(
   "/pruebas-felinas/:pruebaFelinaId",
-  async (req, res): Promise<void> => {
-    const pruebaFelinaId = readId(
-      req.params.pruebaFelinaId,
-    );
+  async (
+    req,
+    res,
+  ): Promise<void> => {
+    const pruebaFelinaId =
+      readId(
+        req.params.pruebaFelinaId,
+      );
 
     if (!pruebaFelinaId) {
       res.status(400).json({
@@ -2187,15 +3173,18 @@ router.delete(
       return;
     }
 
-    const [deleted] = await db
-      .delete(pruebasFelinasTable)
-      .where(
-        eq(
-          pruebasFelinasTable.id,
-          pruebaFelinaId,
-        ),
-      )
-      .returning();
+    const [deleted] =
+      await db
+        .delete(
+          pruebasFelinasTable,
+        )
+        .where(
+          eq(
+            pruebasFelinasTable.id,
+            pruebaFelinaId,
+          ),
+        )
+        .returning();
 
     if (!deleted) {
       res.status(404).json({
