@@ -11,6 +11,7 @@ import {
   Calendar,
   CheckCircle2,
   Clock3,
+  Pencil,
   Plus,
   ShieldCheck,
   Syringe,
@@ -65,6 +66,7 @@ type Vacunacion = {
 type VisitaVacunacion = {
   id: number;
   fechaVisita: string;
+  puedeEditar?: boolean;
   intervaloDias: number | null;
   origen: string;
   medicoResponsable: string | null;
@@ -155,6 +157,7 @@ type MedicinaPreventivaResponse = {
 };
 
 type VacunaFormulario = {
+  id?: number;
   vacuna: string;
   etapa: "Cachorro" | "Adulto";
   marca: string;
@@ -388,6 +391,73 @@ export default function MedicinaPreventivaTab({
   const [vacunas, setVacunas] = useState<
     VacunaFormulario[]
   >([vacunaVacia()]);
+
+  const [visitaVacunacionEditandoId, setVisitaVacunacionEditandoId] =
+    useState<number | null>(null);
+
+  const limpiarFormularioVacunacion = () => {
+    setVisitaVacunacion({
+      fechaVisita: fechaActual(),
+      intervaloDias: "15",
+      origen: "Clinica",
+      medicoResponsable: "",
+      clinicaExterna: "",
+      medicoExterno: "",
+      comprobantePresentado: false,
+      observaciones: "",
+    });
+    setVacunas([vacunaVacia()]);
+    setVisitaVacunacionEditandoId(null);
+  };
+
+  const prepararEdicionVacunacion = (visita: VisitaVacunacion) => {
+    if (!visita.puedeEditar) {
+      toast({
+        variant: "destructive",
+        title: "Registro bloqueado",
+        description: "Solo puede editarse durante el mismo día de aplicación.",
+      });
+      return;
+    }
+
+    setVisitaVacunacionEditandoId(visita.id);
+    setVisitaVacunacion({
+      fechaVisita: visita.fechaVisita.slice(0, 10),
+      intervaloDias:
+        visita.intervaloDias === 21 ? "21" :
+        visita.intervaloDias === 15 ? "15" : "",
+      origen: visita.origen || "Clinica",
+      medicoResponsable: visita.medicoResponsable || "",
+      clinicaExterna: visita.clinicaExterna || "",
+      medicoExterno: visita.medicoExterno || "",
+      comprobantePresentado: false,
+      observaciones: visita.observaciones || "",
+    });
+
+    setVacunas(visita.vacunas.map((vacuna) => ({
+      id: vacuna.id,
+      vacuna: vacuna.vacuna,
+      etapa: vacuna.etapa === "Adulto" ? "Adulto" : "Cachorro",
+      marca: vacuna.marca || "",
+      laboratorio: vacuna.laboratorio || "",
+      lote: vacuna.lote || "",
+      fechaCaducidad: vacuna.fechaCaducidad?.slice(0, 10) || "",
+      fechaAplicacion: vacuna.fechaAplicacion.slice(0, 10),
+      fechaVencimiento: vacuna.fechaVencimiento?.slice(0, 10) || "",
+      proximaAplicacion: vacuna.proximaAplicacion?.slice(0, 10) || "",
+      estado:
+        vacuna.estado === "Cancelada" ? "Cancelada" :
+        vacuna.estado === "Programada/Pendiente" ? "Programada/Pendiente" : "Aplicada",
+      decisionMedica: vacuna.decisionMedica || "",
+      motivoDecision: vacuna.motivoDecision || "",
+      reaccionAdversa: vacuna.reaccionAdversa,
+      descripcionReaccion: vacuna.descripcionReaccion || "",
+      observaciones: vacuna.observaciones || "",
+    })));
+
+    setFormularioActivo("vacunacion");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
 
   /* ---------------------------------------------------------
      ESTADO DE DESPARASITACIÓN
@@ -639,183 +709,82 @@ export default function MedicinaPreventivaTab({
   const registrarVacunacion = useMutation({
     mutationFn: async () => {
       if (!especieNormalizada) {
-        throw new Error(
-          "La vacunación preventiva solo está configurada para perros y gatos.",
-        );
+        throw new Error("La vacunación solo está configurada para perros y gatos.");
       }
 
-      if (
-        vacunas.some(
-          (vacuna) =>
-            !vacuna.vacuna.trim(),
-        )
-      ) {
-        throw new Error(
-          "Debes indicar el nombre de cada vacuna.",
-        );
+      if (vacunas.some((vacuna) => !vacuna.vacuna.trim())) {
+        throw new Error("Debes indicar el nombre de cada vacuna.");
       }
 
-      const respuesta = await fetch(
-        `${BASE}/api/pacientes/${pacienteId}/vacunaciones/visitas`,
-        {
-          method: "POST",
+      const editando = visitaVacunacionEditandoId !== null;
+      const ruta = editando
+        ? `${BASE}/api/vacunaciones/visitas/${visitaVacunacionEditandoId}`
+        : `${BASE}/api/pacientes/${pacienteId}/vacunaciones/visitas`;
 
-          headers: {
-            "Content-Type":
-              "application/json",
-          },
+      const respuesta = await fetch(ruta, {
+        method: editando ? "PUT" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          intervaloDias: visitaVacunacion.intervaloDias
+            ? Number(visitaVacunacion.intervaloDias)
+            : undefined,
+          origen: visitaVacunacion.origen,
+          medicoResponsable: textoOpcional(visitaVacunacion.medicoResponsable),
+          clinicaExterna: textoOpcional(visitaVacunacion.clinicaExterna),
+          medicoExterno: textoOpcional(visitaVacunacion.medicoExterno),
+          comprobantePresentado: visitaVacunacion.comprobantePresentado,
+          observaciones: textoOpcional(visitaVacunacion.observaciones),
+          vacunas: vacunas.map((vacuna) => ({
+            id: vacuna.id,
+            vacuna: vacuna.vacuna.trim(),
+            especie: especieNormalizada,
+            etapa: vacuna.etapa,
+            marca: textoOpcional(vacuna.marca),
+            laboratorio: textoOpcional(vacuna.laboratorio),
+            lote: textoOpcional(vacuna.lote),
+            fechaCaducidad: vacuna.fechaCaducidad || undefined,
+            fechaVencimiento: vacuna.fechaVencimiento || undefined,
+            proximaAplicacion: vacuna.proximaAplicacion || undefined,
+            estado: vacuna.estado,
+            decisionMedica: textoOpcional(vacuna.decisionMedica),
+            motivoDecision: textoOpcional(vacuna.motivoDecision),
+            reaccionAdversa: vacuna.reaccionAdversa,
+            descripcionReaccion: textoOpcional(vacuna.descripcionReaccion),
+            observaciones: textoOpcional(vacuna.observaciones),
+          })),
+        }),
+      });
 
-          body: JSON.stringify({
-            fechaVisita:
-              visitaVacunacion.fechaVisita,
-
-            intervaloDias:
-              visitaVacunacion.intervaloDias
-                ? Number(
-                    visitaVacunacion.intervaloDias,
-                  )
-                : undefined,
-
-            origen:
-              visitaVacunacion.origen,
-
-            medicoResponsable:
-              textoOpcional(
-                visitaVacunacion.medicoResponsable,
-              ),
-
-            clinicaExterna:
-              textoOpcional(
-                visitaVacunacion.clinicaExterna,
-              ),
-
-            medicoExterno:
-              textoOpcional(
-                visitaVacunacion.medicoExterno,
-              ),
-
-            comprobantePresentado:
-              visitaVacunacion.comprobantePresentado,
-
-            observaciones:
-              textoOpcional(
-                visitaVacunacion.observaciones,
-              ),
-
-            vacunas: vacunas.map(
-              (vacuna) => ({
-                vacuna:
-                  vacuna.vacuna.trim(),
-
-                especie:
-                  especieNormalizada,
-
-                etapa: vacuna.etapa,
-
-                marca: textoOpcional(
-                  vacuna.marca,
-                ),
-
-                laboratorio:
-                  textoOpcional(
-                    vacuna.laboratorio,
-                  ),
-
-                lote: textoOpcional(
-                  vacuna.lote,
-                ),
-
-                fechaCaducidad:
-                  vacuna.fechaCaducidad ||
-                  undefined,
-
-                fechaAplicacion:
-                  vacuna.fechaAplicacion,
-
-                fechaVencimiento:
-                  vacuna.fechaVencimiento ||
-                  undefined,
-
-                proximaAplicacion:
-                  vacuna.proximaAplicacion ||
-                  undefined,
-
-                estado: vacuna.estado,
-
-                decisionMedica:
-                  textoOpcional(
-                    vacuna.decisionMedica,
-                  ),
-
-                motivoDecision:
-                  textoOpcional(
-                    vacuna.motivoDecision,
-                  ),
-
-                reaccionAdversa:
-                  vacuna.reaccionAdversa,
-
-                descripcionReaccion:
-                  textoOpcional(
-                    vacuna.descripcionReaccion,
-                  ),
-
-                observaciones:
-                  textoOpcional(
-                    vacuna.observaciones,
-                  ),
-              }),
-            ),
-          }),
-        },
-      );
-
-      const contenido = await respuesta
-        .json()
-        .catch(() => null);
-
+      const contenido = await respuesta.json().catch(() => null);
       if (!respuesta.ok) {
         throw new Error(
           contenido?.error ||
-            "No se pudo registrar la vacunación.",
+            (editando
+              ? "No se pudo actualizar la vacunación."
+              : "No se pudo registrar la vacunación."),
         );
       }
 
-      return contenido;
+      return { editando };
     },
 
-    onSuccess: async () => {
+    onSuccess: async ({ editando }) => {
       await actualizarHistorial();
-
-      setVisitaVacunacion({
-        fechaVisita: fechaActual(),
-        intervaloDias: "15",
-        origen: "Clinica",
-        medicoResponsable: "",
-        clinicaExterna: "",
-        medicoExterno: "",
-        comprobantePresentado: false,
-        observaciones: "",
-      });
-
-      setVacunas([vacunaVacia()]);
+      limpiarFormularioVacunacion();
       setFormularioActivo(null);
-
       toast({
-        title: "Vacunación registrada",
-        description:
-          "La visita de vacunación fue guardada correctamente.",
+        title: editando ? "Vacunación actualizada" : "Vacunación registrada",
       });
     },
 
     onError: (error) => {
       toast({
         variant: "destructive",
-        title: "No se pudo registrar",
-        description:
-          error instanceof Error
-            ? error.message
-            : "Ocurrió un error inesperado.",
+        title:
+          visitaVacunacionEditandoId !== null
+            ? "No se pudo actualizar"
+            : "No se pudo registrar",
+        description: error instanceof Error ? error.message : "Ocurrió un error.",
       });
     },
   });
@@ -1464,7 +1433,7 @@ export default function MedicinaPreventivaTab({
                             recomendacion.vacuna !== "Reevaluar prueba FIV/FeLV" &&
                             !recomendacion.vacuna.includes("decisión médica"),
                         )
-                        .slice(0, 2);
+                        .slice(0, 1);
 
                     if (sugeridas.length === 0) {
                       toast({
@@ -1484,14 +1453,14 @@ export default function MedicinaPreventivaTab({
                             ? "Adulto"
                             : "Cachorro",
                         fechaAplicacion:
-                          data.resumenVacunal.fechaSugerida || fechaActual(),
+                          fechaActual(),
                       })),
                     );
 
                     setVisitaVacunacion((actual) => ({
                       ...actual,
                       fechaVisita:
-                        data.resumenVacunal.fechaSugerida || fechaActual(),
+                        fechaActual(),
                       intervaloDias: String(
                         data.resumenVacunal.intervaloDias,
                       ),
@@ -1564,7 +1533,9 @@ export default function MedicinaPreventivaTab({
             <div className="flex items-center justify-between">
               <CardTitle className="flex items-center gap-2">
                 <Syringe className="h-5 w-5 text-primary" />
-                Nueva visita de vacunación
+                {visitaVacunacionEditandoId !== null
+                  ? "Editar visita de vacunación"
+                  : "Nueva visita de vacunación"}
               </CardTitle>
 
               <Button
@@ -1582,23 +1553,17 @@ export default function MedicinaPreventivaTab({
 
           <CardContent className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <Campo label="Fecha de visita">
+              <Campo label="Fecha de aplicación">
                 <input
                   type="date"
-                  className={campoClass}
-                  value={
-                    visitaVacunacion.fechaVisita
-                  }
-                  onChange={(event) =>
-                    setVisitaVacunacion(
-                      (actual) => ({
-                        ...actual,
-                        fechaVisita:
-                          event.target.value,
-                      }),
-                    )
-                  }
+                  className={`${campoClass} cursor-not-allowed bg-muted`}
+                  value={visitaVacunacion.fechaVisita}
+                  readOnly
+                  disabled
                 />
+                <span className="block text-xs text-muted-foreground">
+                  La fecha se genera automáticamente al guardar y nunca puede modificarse.
+                </span>
               </Campo>
 
               <Campo label="Intervalo del esquema">
@@ -1831,31 +1796,10 @@ export default function MedicinaPreventivaTab({
                     <Campo label="Fecha de aplicación">
                       <input
                         type="date"
-                        className={campoClass}
-                        value={
-                          vacuna.fechaAplicacion
-                        }
-                        onChange={(event) =>
-                          setVacunas(
-                            (actuales) =>
-                              actuales.map(
-                                (
-                                  elemento,
-                                  posicion,
-                                ) =>
-                                  posicion ===
-                                  indice
-                                    ? {
-                                        ...elemento,
-                                        fechaAplicacion:
-                                          event
-                                            .target
-                                            .value,
-                                      }
-                                    : elemento,
-                              ),
-                          )
-                        }
+                        className={`${campoClass} cursor-not-allowed bg-muted`}
+                        value={visitaVacunacion.fechaVisita}
+                        readOnly
+                        disabled
                       />
                     </Campo>
 
@@ -2091,7 +2035,9 @@ export default function MedicinaPreventivaTab({
               >
                 {registrarVacunacion.isPending
                   ? "Guardando..."
-                  : "Guardar vacunación"}
+                  : visitaVacunacionEditandoId !== null
+                    ? "Guardar cambios"
+                    : "Guardar vacunación"}
               </Button>
             </div>
           </CardContent>
@@ -3110,6 +3056,35 @@ export default function MedicinaPreventivaTab({
                           ? "Aplicación externa"
                           : "Nuestra clínica"}
                       </Badge>
+
+                      {visita.puedeEditar && (
+                        <div className="flex gap-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => prepararEdicionVacunacion(visita)}
+                          >
+                            <Pencil className="h-4 w-4 mr-2" />
+                            Editar registro
+                          </Button>
+
+                          <Button
+                            type="button"
+                            size="icon"
+                            variant="ghost"
+                            className="text-destructive"
+                            onClick={() =>
+                              eliminarRegistro(
+                                `vacunaciones/visitas/${visita.id}`,
+                                "esta visita de vacunación",
+                              )
+                            }
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   </CardHeader>
 
