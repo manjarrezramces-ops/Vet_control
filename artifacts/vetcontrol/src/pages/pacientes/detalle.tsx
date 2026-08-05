@@ -55,7 +55,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-
+import MedicinaPreventivaTab from "./medicina-preventiva";
 export default function PacienteDetalle() {
   const params = useParams();
   const id = Number(params.id);
@@ -401,6 +401,7 @@ export default function PacienteDetalle() {
             className="w-full"
           >
             <TabsList className="w-full justify-start h-14 bg-transparent border-b-2 rounded-none p-0 mb-8 space-x-8 overflow-x-auto">
+
               <TabsTrigger
                 value="consultas"
                 className="data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none rounded-none px-2 h-14 text-base font-semibold data-[state=active]:text-primary text-muted-foreground"
@@ -432,6 +433,15 @@ export default function PacienteDetalle() {
                 <Scissors className="w-5 h-5 mr-2" />
                 Procedimientos
               </TabsTrigger>
+
+              <TabsTrigger
+                value="medicina-preventiva"
+                className="data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none rounded-none px-2 h-14 text-base font-semibold data-[state=active]:text-primary text-muted-foreground"
+              >
+                <Activity className="w-5 h-5 mr-2" />
+                Medicina Preventiva
+              </TabsTrigger>
+
             </TabsList>
 
             {/* Consultas */}
@@ -710,6 +720,15 @@ export default function PacienteDetalle() {
               </div>
 
               <ProcedimientosTab pacienteId={id} />
+            </TabsContent>
+            <TabsContent
+              value="medicina-preventiva"
+              className="space-y-6"
+            >
+              <MedicinaPreventivaTab
+                pacienteId={id}
+                especie={paciente.especie}
+              />
             </TabsContent>
           </Tabs>
         </div>
