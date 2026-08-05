@@ -13,12 +13,57 @@ import { z } from "zod/v4";
 const router = Router();
 
 /* =========================================================
+   TIPOS DEL MOTOR PREVENTIVO
+========================================================= */
+
+type EspeciePreventiva = "Perro" | "Gato";
+type EtapaPreventiva = "Cachorro" | "Adulto";
+
+type EstadoVacunacion =
+  | "Aplicada"
+  | "Programada/Pendiente"
+  | "Cancelada";
+
+type EstadoCalculado =
+  | "Sin historial"
+  | "Al corriente"
+  | "Próxima"
+  | "Hoy"
+  | "Atrasada"
+  | "Pendiente de decisión médica";
+
+type VacunaSugerida = {
+  vacuna: string;
+  motivo: string;
+  requiereDecisionMedica?: boolean;
+};
+
+type ResumenVacunal = {
+  especie: EspeciePreventiva | null;
+  etapa: EtapaPreventiva | null;
+  intervaloDias: number;
+  estado: EstadoCalculado;
+  fechaSugerida: string | null;
+  diasDiferencia: number | null;
+  vacunasSiguienteVisita: VacunaSugerida[];
+  vacunasPendientesPosteriores: VacunaSugerida[];
+  esquemaCompleto: boolean;
+  advertencias: string[];
+};
+
+/* =========================================================
    ESQUEMAS DE VALIDACIÓN
 ========================================================= */
 
 const idSchema = z.coerce.number().int().positive();
 
 const origenSchema = z.enum(["Clinica", "Externa"]);
+
+const estadoVacunaSchema = z.enum([
+  "Aplicada",
+  "Programada/Pendiente",
+  "Cancelada",
+]);
 
 const vacunaSchema = z.object({
   vacuna: z.string().min(1),
@@ -34,19 +79,7 @@ const vacunaSchema = z.object({
   fechaVencimiento: z.string().optional(),
   proximaAplicacion: z.string().optional(),
 
-  estado: z
-    .enum([
-      "Aplicada",
-      "Vigente",
-      "Proxima",
-      "Vencida",
-      "Pendiente",
-      "Pospuesta",
-      "No indicada",
-      "Contraindicada",
-      "Pendiente de decision medica",
-    ])
-    .optional(),
+  estado: estadoVacunaSchema.optional(),
 
   decisionMedica: z.string().optional(),
   motivoDecision: z.string().optional(),
@@ -63,7 +96,9 @@ const crearVisitaVacunacionSchema = z.object({
 
   fechaVisita: z.string().min(1),
 
-  intervaloDias: z.union([z.literal(15), z.literal(21)]).optional(),
+  intervaloDias: z
+    .union([z.literal(15), z.literal(21)])
+    .optional(),
 
   origen: origenSchema.optional(),
 
@@ -103,16 +138,10 @@ const crearDesparasitacionSchema = z
 
     duracionDias: z.number().int().positive().optional(),
 
-    /**
-     * Frecuencia elegida por criterio médico.
-     * No tiene que ser igual a la duración del efecto.
-     */
     frecuenciaDias: z.number().int().positive().optional(),
 
-    /**
-     * Puede calcularse desde frecuenciaDias o elegirse manualmente.
-     */
     proximaAplicacion: z.string().optional(),
+
     programarProxima: z.boolean().optional(),
 
     tipoProgramacion: z
@@ -138,16 +167,19 @@ const crearDesparasitacionSchema = z
     decisionMedica: z.string().optional(),
 
     fechaFinCobertura: z.string().optional(),
+
     pesoAplicacion: z.string().optional(),
 
     observaciones: z.string().optional(),
 
     comprobantePresentado: z.boolean().optional(),
+
     archivoComprobante: z.string().optional(),
   })
   .refine(
     (data) =>
-      Boolean(data.cubreInternos) || Boolean(data.cubreExternos),
+      Boolean(data.cubreInternos) ||
+      Boolean(data.cubreExternos),
     {
       message:
         "La desparasitación debe cubrir internos, externos o ambos.",
@@ -215,10 +247,12 @@ const actualizarPruebaFelinaSchema =
   crearPruebaFelinaSchema.partial();
 
 /* =========================================================
-   FUNCIONES AUXILIARES
+   FUNCIONES GENERALES
 ========================================================= */
 
-function readId(value: string | string[] | undefined): number | null {
+function readId(
+  value: string | string[] | undefined,
+): number | null {
   const parsed = idSchema.safeParse(
     Array.isArray(value) ? value[0] : value,
   );
@@ -226,32 +260,228 @@ function readId(value: string | string[] | undefined): number | null {
   return parsed.success ? parsed.data : null;
 }
 
-function dateToIso(
-  value: Date | null | undefined,
-): string | null {
-  return value ? value.toISOString() : null;
-}
-
-function addDays(dateString: string, days: number): string {
-  const date = new Date(`${dateString}T12:00:00`);
+function addDays(
+  dateString: string,
+  days: number,
+): string {
+  const date = new Date(
+    `${dateString.slice(0, 10)}T12:00:00`,
+  );
 
   date.setDate(date.getDate() + days);
 
   return date.toISOString().slice(0, 10);
 }
 
-async function patientExists(
+function differenceInDays(
+  targetDate: string,
+  baseDate = new Date(),
+): number {
+  const target = new Date(
+    `${targetDate.slice(0, 10)}T12:00:00`,
+  );
+
+  const base = new Date(
+    baseDate.getFullYear(),
+    baseDate.getMonth(),
+    baseDate.getDate(),
+    12,
+    0,
+    0,
+  );
+
+  return Math.round(
+    (target.getTime() - base.getTime()) /
+      86_400_000,
+  );
+}
+
+function normalizeText(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^\w\s]/g, " ")
+    .replace(/\s+/g, " ");
+}
+
+function normalizarEspecie(
+  especie: string | null | undefined,
+): EspeciePreventiva | null {
+  if (!especie) {
+    return null;
+  }
+
+  const normalizada = normalizeText(especie);
+
+  if (
+    normalizada === "perro" ||
+    normalizada === "canino"
+  ) {
+    return "Perro";
+  }
+
+  if (
+    normalizada === "gato" ||
+    normalizada === "felino"
+  ) {
+    return "Gato";
+  }
+
+  return null;
+}
+
+function calcularEdadMeses(
+  fechaNacimiento: string | null | undefined,
+): number | null {
+  if (!fechaNacimiento) {
+    return null;
+  }
+
+  const nacimiento = new Date(
+    `${fechaNacimiento.slice(0, 10)}T12:00:00`,
+  );
+
+  if (Number.isNaN(nacimiento.getTime())) {
+    return null;
+  }
+
+  const hoy = new Date();
+
+  let meses =
+    (hoy.getFullYear() - nacimiento.getFullYear()) *
+      12 +
+    hoy.getMonth() -
+    nacimiento.getMonth();
+
+  if (hoy.getDate() < nacimiento.getDate()) {
+    meses -= 1;
+  }
+
+  return Math.max(0, meses);
+}
+
+function determinarEtapa(
+  edadMeses: number | null,
+  ultimaEtapa?: string | null,
+): EtapaPreventiva | null {
+  if (ultimaEtapa === "Cachorro") {
+    return "Cachorro";
+  }
+
+  if (ultimaEtapa === "Adulto") {
+    return "Adulto";
+  }
+
+  if (edadMeses === null) {
+    return null;
+  }
+
+  return edadMeses < 12
+    ? "Cachorro"
+    : "Adulto";
+}
+
+async function getPatient(
   pacienteId: number,
-): Promise<boolean> {
+) {
   const [paciente] = await db
-    .select({
-      id: pacientesTable.id,
-    })
+    .select()
     .from(pacientesTable)
     .where(eq(pacientesTable.id, pacienteId));
 
-  return Boolean(paciente);
+  return paciente ?? null;
 }
+
+async function patientExists(
+  pacienteId: number,
+): Promise<boolean> {
+  return Boolean(await getPatient(pacienteId));
+}
+
+/* =========================================================
+   NORMALIZACIÓN DE NOMBRES DE VACUNAS
+========================================================= */
+
+function identificarVacuna(
+  nombre: string,
+):
+  | "Cuadruple"
+  | "Sextuple"
+  | "Octuple"
+  | "Bordetella"
+  | "Giardia"
+  | "Rabia"
+  | "Triple felina"
+  | "Cuadruple felina"
+  | "Leucemia felina"
+  | null {
+  const normalizada = normalizeText(nombre);
+
+  if (
+    normalizada.includes("triple") &&
+    normalizada.includes("fel")
+  ) {
+    return "Triple felina";
+  }
+
+  if (
+    normalizada.includes("cuadruple") &&
+    normalizada.includes("fel")
+  ) {
+    return "Cuadruple felina";
+  }
+
+  if (
+    normalizada.includes("leucemia") ||
+    normalizada.includes("felv")
+  ) {
+    return "Leucemia felina";
+  }
+
+  if (normalizada.includes("bordetella")) {
+    return "Bordetella";
+  }
+
+  if (normalizada.includes("giardia")) {
+    return "Giardia";
+  }
+
+  if (
+    normalizada.includes("rabia") ||
+    normalizada.includes("antirrab")
+  ) {
+    return "Rabia";
+  }
+
+  if (
+    normalizada.includes("octuple") ||
+    normalizada.includes("octupla")
+  ) {
+    return "Octuple";
+  }
+
+  if (
+    normalizada.includes("sextuple") ||
+    normalizada.includes("sextupla")
+  ) {
+    return "Sextuple";
+  }
+
+  if (
+    normalizada.includes("cuadruple") ||
+    normalizada.includes("cuadrupla")
+  ) {
+    return "Cuadruple";
+  }
+
+  return null;
+}
+
+/* =========================================================
+   SERIALIZADORES
+========================================================= */
 
 function serializeVaccinationVisit<
   T extends {
@@ -262,7 +492,8 @@ function serializeVaccinationVisit<
   return {
     ...record,
     creadoEn: record.creadoEn.toISOString(),
-    actualizadoEn: record.actualizadoEn.toISOString(),
+    actualizadoEn:
+      record.actualizadoEn.toISOString(),
   };
 }
 
@@ -275,7 +506,8 @@ function serializeVaccine<
   return {
     ...record,
     creadoEn: record.creadoEn.toISOString(),
-    actualizadoEn: record.actualizadoEn.toISOString(),
+    actualizadoEn:
+      record.actualizadoEn.toISOString(),
   };
 }
 
@@ -288,7 +520,8 @@ function serializeDeworming<
   return {
     ...record,
     creadoEn: record.creadoEn.toISOString(),
-    actualizadoEn: record.actualizadoEn.toISOString(),
+    actualizadoEn:
+      record.actualizadoEn.toISOString(),
   };
 }
 
@@ -301,7 +534,483 @@ function serializeFelineTest<
   return {
     ...record,
     creadoEn: record.creadoEn.toISOString(),
-    actualizadoEn: record.actualizadoEn.toISOString(),
+    actualizadoEn:
+      record.actualizadoEn.toISOString(),
+  };
+}
+
+/* =========================================================
+   MOTOR DE RECOMENDACIÓN VACUNAL
+========================================================= */
+
+function estadoPorFecha(
+  fecha: string | null,
+): {
+  estado: EstadoCalculado;
+  diasDiferencia: number | null;
+} {
+  if (!fecha) {
+    return {
+      estado: "Sin historial",
+      diasDiferencia: null,
+    };
+  }
+
+  const dias = differenceInDays(fecha);
+
+  if (dias < 0) {
+    return {
+      estado: "Atrasada",
+      diasDiferencia: dias,
+    };
+  }
+
+  if (dias === 0) {
+    return {
+      estado: "Hoy",
+      diasDiferencia: 0,
+    };
+  }
+
+  if (dias <= 15) {
+    return {
+      estado: "Próxima",
+      diasDiferencia: dias,
+    };
+  }
+
+  return {
+    estado: "Al corriente",
+    diasDiferencia: dias,
+  };
+}
+
+function tieneVacunaAplicada(
+  aplicadas: Set<string>,
+  vacuna: string,
+): boolean {
+  return aplicadas.has(vacuna);
+}
+
+function construirPendientesPerro(
+  etapa: EtapaPreventiva,
+  aplicadas: Set<string>,
+): VacunaSugerida[] {
+  const pendientes: VacunaSugerida[] = [];
+
+  if (etapa === "Cachorro") {
+    if (
+      !tieneVacunaAplicada(
+        aplicadas,
+        "Cuadruple",
+      )
+    ) {
+      pendientes.push({
+        vacuna: "Cuádruple",
+        motivo:
+          "Primera vacuna del esquema de cachorro.",
+      });
+    }
+
+    if (
+      !tieneVacunaAplicada(
+        aplicadas,
+        "Sextuple",
+      )
+    ) {
+      pendientes.push({
+        vacuna: "Séxtuple",
+        motivo:
+          "Refuerzo posterior a la vacuna cuádruple.",
+      });
+    }
+
+    if (
+      !tieneVacunaAplicada(
+        aplicadas,
+        "Octuple",
+      )
+    ) {
+      pendientes.push({
+        vacuna: "Óctuple",
+        motivo:
+          "Refuerzo posterior dentro del esquema de cachorro.",
+      });
+    }
+  } else if (
+    !tieneVacunaAplicada(
+      aplicadas,
+      "Octuple",
+    )
+  ) {
+    pendientes.push({
+      vacuna: "Óctuple",
+      motivo:
+        "Refuerzo principal del esquema anual adulto.",
+    });
+  }
+
+  if (
+    !tieneVacunaAplicada(
+      aplicadas,
+      "Bordetella",
+    )
+  ) {
+    pendientes.push({
+      vacuna: "Bordetella",
+      motivo:
+        "Vacuna pendiente del esquema preventivo.",
+    });
+  }
+
+  if (
+    !tieneVacunaAplicada(
+      aplicadas,
+      "Giardia",
+    )
+  ) {
+    pendientes.push({
+      vacuna: "Giardia",
+      motivo:
+        "Vacuna pendiente del esquema preventivo.",
+    });
+  }
+
+  if (
+    !tieneVacunaAplicada(
+      aplicadas,
+      "Rabia",
+    )
+  ) {
+    pendientes.push({
+      vacuna: "Rabia",
+      motivo:
+        "Vacuna antirrábica pendiente.",
+    });
+  }
+
+  return pendientes;
+}
+
+function construirPendientesGato(
+  etapa: EtapaPreventiva,
+  aplicadas: Set<string>,
+  ultimaPruebaFelina:
+    | {
+        resultadoFelv: string;
+        decisionLeucemia: string | null;
+      }
+    | null,
+): {
+  pendientes: VacunaSugerida[];
+  advertencias: string[];
+} {
+  const pendientes: VacunaSugerida[] = [];
+  const advertencias: string[] = [];
+
+  const tieneTriple =
+    tieneVacunaAplicada(
+      aplicadas,
+      "Triple felina",
+    );
+
+  const tieneCuadruple =
+    tieneVacunaAplicada(
+      aplicadas,
+      "Cuadruple felina",
+    );
+
+  if (etapa === "Cachorro") {
+    if (!tieneTriple) {
+      pendientes.push({
+        vacuna: "Triple felina",
+        motivo:
+          "Primera vacuna obligatoria del esquema felino de cachorro.",
+      });
+    } else if (!tieneCuadruple) {
+      pendientes.push({
+        vacuna:
+          "Triple felina o Cuádruple felina",
+        motivo:
+          "Refuerzo posterior a la primera triple felina.",
+      });
+    }
+  } else if (
+    !tieneTriple &&
+    !tieneCuadruple
+  ) {
+    pendientes.push({
+      vacuna:
+        "Triple felina o Cuádruple felina",
+      motivo:
+        "Refuerzo preventivo del gato adulto.",
+    });
+  }
+
+  if (
+    !tieneVacunaAplicada(
+      aplicadas,
+      "Rabia",
+    )
+  ) {
+    pendientes.push({
+      vacuna: "Rabia",
+      motivo:
+        "Vacuna antirrábica pendiente.",
+    });
+  }
+
+  if (
+    !tieneVacunaAplicada(
+      aplicadas,
+      "Leucemia felina",
+    )
+  ) {
+    if (!ultimaPruebaFelina) {
+      pendientes.push({
+        vacuna: "Prueba FIV/FeLV",
+        motivo:
+          "Se requiere evaluación antes de decidir sobre leucemia felina.",
+        requiereDecisionMedica: true,
+      });
+
+      advertencias.push(
+        "No hay prueba FIV/FeLV registrada para valorar leucemia felina.",
+      );
+    } else if (
+      ultimaPruebaFelina.resultadoFelv ===
+        "Negativo" &&
+      ultimaPruebaFelina.decisionLeucemia ===
+        "Aplicar"
+    ) {
+      pendientes.push({
+        vacuna: "Leucemia felina",
+        motivo:
+          "Prueba FeLV negativa y decisión médica de aplicar.",
+        requiereDecisionMedica: true,
+      });
+    } else if (
+      ultimaPruebaFelina.resultadoFelv ===
+      "Negativo"
+    ) {
+      pendientes.push({
+        vacuna:
+          "Leucemia felina: decisión médica",
+        motivo:
+          "Existe prueba FeLV negativa, pero falta confirmar la decisión médica.",
+        requiereDecisionMedica: true,
+      });
+
+      advertencias.push(
+        "La vacuna de leucemia felina permanece pendiente de decisión médica.",
+      );
+    } else if (
+      ultimaPruebaFelina.resultadoFelv ===
+      "Positivo"
+    ) {
+      advertencias.push(
+        "La última prueba FeLV es positiva. No se sugiere automáticamente vacuna de leucemia.",
+      );
+    } else {
+      pendientes.push({
+        vacuna:
+          "Reevaluar prueba FIV/FeLV",
+        motivo:
+          "El resultado FeLV no es concluyente.",
+        requiereDecisionMedica: true,
+      });
+    }
+  }
+
+  return {
+    pendientes,
+    advertencias,
+  };
+}
+
+async function calcularResumenVacunal(
+  pacienteId: number,
+): Promise<ResumenVacunal> {
+  const paciente = await getPatient(pacienteId);
+
+  if (!paciente) {
+    throw new Error("Paciente no encontrado.");
+  }
+
+  const vacunas = await db
+    .select()
+    .from(vacunacionesTable)
+    .where(
+      eq(
+        vacunacionesTable.pacienteId,
+        pacienteId,
+      ),
+    )
+    .orderBy(
+      desc(vacunacionesTable.fechaAplicacion),
+    );
+
+  const visitas = await db
+    .select()
+    .from(vacunacionVisitasTable)
+    .where(
+      eq(
+        vacunacionVisitasTable.pacienteId,
+        pacienteId,
+      ),
+    )
+    .orderBy(
+      desc(vacunacionVisitasTable.fechaVisita),
+    );
+
+  const [ultimaPruebaFelina] = await db
+    .select()
+    .from(pruebasFelinasTable)
+    .where(
+      eq(
+        pruebasFelinasTable.pacienteId,
+        pacienteId,
+      ),
+    )
+    .orderBy(
+      desc(pruebasFelinasTable.fechaPrueba),
+    )
+    .limit(1);
+
+  const especie = normalizarEspecie(
+    paciente.especie,
+  );
+
+  const edadMeses = calcularEdadMeses(
+    paciente.fechaNacimiento,
+  );
+
+  const ultimaVacuna = vacunas[0] ?? null;
+
+  const etapa = determinarEtapa(
+    edadMeses,
+    ultimaVacuna?.etapa,
+  );
+
+  const intervaloDias =
+    visitas[0]?.intervaloDias === 21
+      ? 21
+      : 15;
+
+  if (!especie || !etapa) {
+    return {
+      especie,
+      etapa,
+      intervaloDias,
+      estado: "Sin historial",
+      fechaSugerida: null,
+      diasDiferencia: null,
+      vacunasSiguienteVisita: [],
+      vacunasPendientesPosteriores: [],
+      esquemaCompleto: false,
+      advertencias: [
+        "No fue posible determinar la especie o etapa de vida del paciente.",
+      ],
+    };
+  }
+
+  const vacunasAplicadas = vacunas.filter(
+    (vacuna) =>
+      vacuna.estado === "Aplicada",
+  );
+
+  const aplicadasNormalizadas = new Set<string>();
+
+  for (const vacuna of vacunasAplicadas) {
+    const identificada = identificarVacuna(
+      vacuna.vacuna,
+    );
+
+    if (identificada) {
+      aplicadasNormalizadas.add(
+        identificada,
+      );
+    }
+  }
+
+  let pendientes: VacunaSugerida[] = [];
+  let advertencias: string[] = [];
+
+  if (especie === "Perro") {
+    pendientes = construirPendientesPerro(
+      etapa,
+      aplicadasNormalizadas,
+    );
+  } else {
+    const resultadoFelino =
+      construirPendientesGato(
+        etapa,
+        aplicadasNormalizadas,
+        ultimaPruebaFelina
+          ? {
+              resultadoFelv:
+                ultimaPruebaFelina.resultadoFelv,
+              decisionLeucemia:
+                ultimaPruebaFelina.decisionLeucemia,
+            }
+          : null,
+      );
+
+    pendientes = resultadoFelino.pendientes;
+    advertencias =
+      resultadoFelino.advertencias;
+  }
+
+  const vacunasSiguienteVisita =
+    pendientes.slice(0, 2);
+
+  const vacunasPendientesPosteriores =
+    pendientes.slice(2);
+
+  const fechaBase =
+    ultimaVacuna?.fechaAplicacion ??
+    visitas[0]?.fechaVisita ??
+    null;
+
+  const fechaSugerida =
+    pendientes.length > 0 && fechaBase
+      ? addDays(fechaBase, intervaloDias)
+      : pendientes.length > 0
+        ? new Date().toISOString().slice(0, 10)
+        : null;
+
+  const estadoFecha =
+    estadoPorFecha(fechaSugerida);
+
+  const requiereDecision = pendientes.some(
+    (pendiente) =>
+      pendiente.requiereDecisionMedica,
+  );
+
+  const estado: EstadoCalculado =
+    pendientes.length === 0
+      ? "Al corriente"
+      : requiereDecision &&
+          vacunasSiguienteVisita.every(
+            (vacuna) =>
+              vacuna.requiereDecisionMedica,
+          )
+        ? "Pendiente de decisión médica"
+        : estadoFecha.estado;
+
+  return {
+    especie,
+    etapa,
+    intervaloDias,
+    estado,
+    fechaSugerida,
+    diasDiferencia:
+      estadoFecha.diasDiferencia,
+    vacunasSiguienteVisita,
+    vacunasPendientesPosteriores,
+    esquemaCompleto:
+      pendientes.length === 0,
+    advertencias,
   };
 }
 
@@ -313,11 +1022,14 @@ function serializeFelineTest<
 router.get(
   "/pacientes/:pacienteId/medicina-preventiva",
   async (req, res): Promise<void> => {
-    const pacienteId = readId(req.params.pacienteId);
+    const pacienteId = readId(
+      req.params.pacienteId,
+    );
 
     if (!pacienteId) {
       res.status(400).json({
-        error: "Identificador de paciente inválido.",
+        error:
+          "Identificador de paciente inválido.",
       });
       return;
     }
@@ -333,81 +1045,110 @@ router.get(
       .select()
       .from(vacunacionVisitasTable)
       .where(
-        eq(vacunacionVisitasTable.pacienteId, pacienteId),
+        eq(
+          vacunacionVisitasTable.pacienteId,
+          pacienteId,
+        ),
       )
-      .orderBy(desc(vacunacionVisitasTable.fechaVisita));
+      .orderBy(
+        desc(vacunacionVisitasTable.fechaVisita),
+      );
 
     const vacunas = await db
       .select()
       .from(vacunacionesTable)
-      .where(eq(vacunacionesTable.pacienteId, pacienteId))
-      .orderBy(desc(vacunacionesTable.fechaAplicacion));
+      .where(
+        eq(
+          vacunacionesTable.pacienteId,
+          pacienteId,
+        ),
+      )
+      .orderBy(
+        desc(vacunacionesTable.fechaAplicacion),
+      );
 
     const desparasitaciones = await db
       .select()
       .from(desparasitacionesTable)
       .where(
-        eq(desparasitacionesTable.pacienteId, pacienteId),
+        eq(
+          desparasitacionesTable.pacienteId,
+          pacienteId,
+        ),
       )
       .orderBy(
-        desc(desparasitacionesTable.fechaAplicacion),
+        desc(
+          desparasitacionesTable.fechaAplicacion,
+        ),
       );
 
     const pruebasFelinas = await db
       .select()
       .from(pruebasFelinasTable)
-      .where(eq(pruebasFelinasTable.pacienteId, pacienteId))
-      .orderBy(desc(pruebasFelinasTable.fechaPrueba));
+      .where(
+        eq(
+          pruebasFelinasTable.pacienteId,
+          pacienteId,
+        ),
+      )
+      .orderBy(
+        desc(pruebasFelinasTable.fechaPrueba),
+      );
 
-    const visitasConVacunas = visitas.map((visita) => ({
-      ...serializeVaccinationVisit(visita),
+    const visitasConVacunas = visitas.map(
+      (visita) => ({
+        ...serializeVaccinationVisit(visita),
 
-      vacunas: vacunas
-        .filter((vacuna) => vacuna.visitaId === visita.id)
-        .map(serializeVaccine),
-    }));
+        vacunas: vacunas
+          .filter(
+            (vacuna) =>
+              vacuna.visitaId === visita.id,
+          )
+          .map(serializeVaccine),
+      }),
+    );
+
+    const resumenVacunal =
+      await calcularResumenVacunal(
+        pacienteId,
+      );
 
     res.json({
       pacienteId,
 
-      visitasVacunacion: visitasConVacunas,
+      resumenVacunal,
 
-      vacunaciones: vacunas.map(serializeVaccine),
+      visitasVacunacion:
+        visitasConVacunas,
+
+      vacunaciones:
+        vacunas.map(serializeVaccine),
 
       desparasitaciones:
-        desparasitaciones.map(serializeDeworming),
+        desparasitaciones.map(
+          serializeDeworming,
+        ),
 
-      pruebasFelinas: pruebasFelinas.map(
-        serializeFelineTest,
-      ),
+      pruebasFelinas:
+        pruebasFelinas.map(
+          serializeFelineTest,
+        ),
     });
   },
 );
 
-/* =========================================================
-   VACUNACIONES
-========================================================= */
-
-// POST /pacientes/:pacienteId/vacunaciones/visitas
-router.post(
-  "/pacientes/:pacienteId/vacunaciones/visitas",
+// GET /pacientes/:pacienteId/recomendacion-vacunal
+router.get(
+  "/pacientes/:pacienteId/recomendacion-vacunal",
   async (req, res): Promise<void> => {
-    const pacienteId = readId(req.params.pacienteId);
+    const pacienteId = readId(
+      req.params.pacienteId,
+    );
 
     if (!pacienteId) {
       res.status(400).json({
-        error: "Identificador de paciente inválido.",
-      });
-      return;
-    }
-
-    const parsed = crearVisitaVacunacionSchema.safeParse(
-      req.body,
-    );
-
-    if (!parsed.success) {
-      res.status(400).json({
-        error: parsed.error.message,
+        error:
+          "Identificador de paciente inválido.",
       });
       return;
     }
@@ -419,10 +1160,63 @@ router.post(
       return;
     }
 
+    const resumen =
+      await calcularResumenVacunal(
+        pacienteId,
+      );
+
+    res.json(resumen);
+  },
+);
+
+/* =========================================================
+   VACUNACIONES
+========================================================= */
+
+// POST /pacientes/:pacienteId/vacunaciones/visitas
+router.post(
+  "/pacientes/:pacienteId/vacunaciones/visitas",
+  async (req, res): Promise<void> => {
+    const pacienteId = readId(
+      req.params.pacienteId,
+    );
+
+    if (!pacienteId) {
+      res.status(400).json({
+        error:
+          "Identificador de paciente inválido.",
+      });
+      return;
+    }
+
+    const parsed =
+      crearVisitaVacunacionSchema.safeParse(
+        req.body,
+      );
+
+    if (!parsed.success) {
+      res.status(400).json({
+        error: parsed.error.message,
+      });
+      return;
+    }
+
+    const paciente =
+      await getPatient(pacienteId);
+
+    if (!paciente) {
+      res.status(404).json({
+        error: "Paciente no encontrado.",
+      });
+      return;
+    }
+
     const data = parsed.data;
 
     const especies = new Set(
-      data.vacunas.map((vacuna) => vacuna.especie),
+      data.vacunas.map(
+        (vacuna) => vacuna.especie,
+      ),
     );
 
     if (especies.size !== 1) {
@@ -434,7 +1228,9 @@ router.post(
     }
 
     const etapas = new Set(
-      data.vacunas.map((vacuna) => vacuna.etapa),
+      data.vacunas.map(
+        (vacuna) => vacuna.etapa,
+      ),
     );
 
     if (etapas.size !== 1) {
@@ -445,32 +1241,72 @@ router.post(
       return;
     }
 
-    const especie = data.vacunas[0]?.especie;
-    const etapa = data.vacunas[0]?.etapa;
+    const especie =
+      data.vacunas[0]?.especie;
 
-    /*
-     * Regla:
-     * La primera vacuna de un gato cachorro debe ser Triple felina.
-     */
-    if (especie === "Gato" && etapa === "Cachorro") {
-      const vacunasFelinasPrevias = await db
-        .select({
-          id: vacunacionesTable.id,
-        })
-        .from(vacunacionesTable)
-        .where(
-          and(
-            eq(vacunacionesTable.pacienteId, pacienteId),
-            eq(vacunacionesTable.especie, "Gato"),
-          ),
+    const etapa =
+      data.vacunas[0]?.etapa;
+
+    const especiePaciente =
+      normalizarEspecie(paciente.especie);
+
+    if (
+      especiePaciente &&
+      especiePaciente !== especie
+    ) {
+      res.status(400).json({
+        error:
+          "La especie seleccionada no coincide con la especie registrada del paciente.",
+      });
+      return;
+    }
+
+    if (
+      especie === "Gato" &&
+      etapa === "Cachorro"
+    ) {
+      const vacunasFelinasPrevias =
+        await db
+          .select({
+            id: vacunacionesTable.id,
+            estado:
+              vacunacionesTable.estado,
+          })
+          .from(vacunacionesTable)
+          .where(
+            and(
+              eq(
+                vacunacionesTable.pacienteId,
+                pacienteId,
+              ),
+              eq(
+                vacunacionesTable.especie,
+                "Gato",
+              ),
+            ),
+          );
+
+      const tieneAplicacionesPrevias =
+        vacunasFelinasPrevias.some(
+          (vacuna) =>
+            vacuna.estado === "Aplicada",
         );
 
-      if (vacunasFelinasPrevias.length === 0) {
-        const primeraVacuna = data.vacunas[0];
+      if (!tieneAplicacionesPrevias) {
+        const primeraVacuna =
+          data.vacunas[0];
+
+        const identificada =
+          primeraVacuna
+            ? identificarVacuna(
+                primeraVacuna.vacuna,
+              )
+            : null;
 
         if (
           data.vacunas.length !== 1 ||
-          primeraVacuna?.vacuna !== "Triple felina"
+          identificada !==
+            "Triple felina"
         ) {
           res.status(400).json({
             error:
@@ -481,24 +1317,29 @@ router.post(
       }
     }
 
-    /*
-     * Para aplicar vacuna contra leucemia felina debe existir
-     * una prueba FeLV negativa registrada.
-     */
-    const incluyeLeucemia = data.vacunas.some(
-      (vacuna) =>
-        vacuna.vacuna.trim().toLowerCase() ===
-        "leucemia felina",
-    );
+    const incluyeLeucemia =
+      data.vacunas.some(
+        (vacuna) =>
+          identificarVacuna(
+            vacuna.vacuna,
+          ) === "Leucemia felina",
+      );
 
     if (incluyeLeucemia) {
       const [ultimaPrueba] = await db
         .select()
         .from(pruebasFelinasTable)
         .where(
-          eq(pruebasFelinasTable.pacienteId, pacienteId),
+          eq(
+            pruebasFelinasTable.pacienteId,
+            pacienteId,
+          ),
         )
-        .orderBy(desc(pruebasFelinasTable.fechaPrueba))
+        .orderBy(
+          desc(
+            pruebasFelinasTable.fechaPrueba,
+          ),
+        )
         .limit(1);
 
       if (!ultimaPrueba) {
@@ -509,10 +1350,24 @@ router.post(
         return;
       }
 
-      if (ultimaPrueba.resultadoFelv !== "Negativo") {
+      if (
+        ultimaPrueba.resultadoFelv !==
+        "Negativo"
+      ) {
         res.status(400).json({
           error:
             "La última prueba FeLV registrada no tiene resultado negativo.",
+        });
+        return;
+      }
+
+      if (
+        ultimaPrueba.decisionLeucemia !==
+        "Aplicar"
+      ) {
+        res.status(400).json({
+          error:
+            "La última prueba felina no tiene registrada la decisión médica de aplicar leucemia.",
         });
         return;
       }
@@ -520,23 +1375,47 @@ router.post(
 
     const result = await db.transaction(
       async (transaction) => {
-        const [visita] = await transaction
-          .insert(vacunacionVisitasTable)
-          .values({
-            pacienteId,
-            consultaId: data.consultaId,
-            fechaVisita: data.fechaVisita,
-            intervaloDias: data.intervaloDias,
-            origen: data.origen ?? "Clinica",
-            medicoResponsable:
-              data.medicoResponsable || null,
-            clinicaExterna: data.clinicaExterna || null,
-            medicoExterno: data.medicoExterno || null,
-            comprobantePresentado:
-              data.comprobantePresentado ?? false,
-            observaciones: data.observaciones || null,
-          })
-          .returning();
+        const [visita] =
+          await transaction
+            .insert(
+              vacunacionVisitasTable,
+            )
+            .values({
+              pacienteId,
+              consultaId:
+                data.consultaId,
+
+              fechaVisita:
+                data.fechaVisita,
+
+              intervaloDias:
+                data.intervaloDias,
+
+              origen:
+                data.origen ??
+                "Clinica",
+
+              medicoResponsable:
+                data.medicoResponsable ||
+                null,
+
+              clinicaExterna:
+                data.clinicaExterna ||
+                null,
+
+              medicoExterno:
+                data.medicoExterno ||
+                null,
+
+              comprobantePresentado:
+                data.comprobantePresentado ??
+                false,
+
+              observaciones:
+                data.observaciones ||
+                null,
+            })
+            .returning();
 
         if (!visita) {
           throw new Error(
@@ -544,62 +1423,86 @@ router.post(
           );
         }
 
-        const aplicaciones = data.vacunas.map(
-          (vacuna) => ({
-            visitaId: visita.id,
-            pacienteId,
+        const aplicaciones =
+          data.vacunas.map(
+            (vacuna) => ({
+              visitaId: visita.id,
+              pacienteId,
 
-            vacuna: vacuna.vacuna,
-            especie: vacuna.especie,
-            etapa: vacuna.etapa,
+              vacuna:
+                vacuna.vacuna.trim(),
 
-            marca: vacuna.marca || null,
-            laboratorio: vacuna.laboratorio || null,
-            lote: vacuna.lote || null,
+              especie:
+                vacuna.especie,
 
-            fechaCaducidad:
-              vacuna.fechaCaducidad || null,
+              etapa:
+                vacuna.etapa,
 
-            fechaAplicacion: vacuna.fechaAplicacion,
+              marca:
+                vacuna.marca || null,
 
-            fechaVencimiento:
-              vacuna.fechaVencimiento || null,
+              laboratorio:
+                vacuna.laboratorio ||
+                null,
 
-            proximaAplicacion:
-              vacuna.proximaAplicacion ||
-              (data.intervaloDias
-                ? addDays(
-                    vacuna.fechaAplicacion,
-                    data.intervaloDias,
-                  )
-                : null),
+              lote:
+                vacuna.lote || null,
 
-            estado: vacuna.estado ?? "Aplicada",
+              fechaCaducidad:
+                vacuna.fechaCaducidad ||
+                null,
 
-            decisionMedica:
-              vacuna.decisionMedica || null,
+              fechaAplicacion:
+                vacuna.fechaAplicacion,
 
-            motivoDecision:
-              vacuna.motivoDecision || null,
+              fechaVencimiento:
+                vacuna.fechaVencimiento ||
+                null,
 
-            tipoRegistro:
-              vacuna.tipoRegistro ?? "Aplicacion",
+              proximaAplicacion:
+                vacuna.proximaAplicacion ||
+                (data.intervaloDias
+                  ? addDays(
+                      vacuna.fechaAplicacion,
+                      data.intervaloDias,
+                    )
+                  : null),
 
-            reaccionAdversa:
-              vacuna.reaccionAdversa ?? false,
+              estado:
+                vacuna.estado ??
+                "Aplicada",
 
-            descripcionReaccion:
-              vacuna.descripcionReaccion || null,
+              decisionMedica:
+                vacuna.decisionMedica ||
+                null,
 
-            observaciones:
-              vacuna.observaciones || null,
-          }),
-        );
+              motivoDecision:
+                vacuna.motivoDecision ||
+                null,
 
-        const vacunasCreadas = await transaction
-          .insert(vacunacionesTable)
-          .values(aplicaciones)
-          .returning();
+              tipoRegistro:
+                vacuna.tipoRegistro ??
+                "Aplicacion",
+
+              reaccionAdversa:
+                vacuna.reaccionAdversa ??
+                false,
+
+              descripcionReaccion:
+                vacuna.descripcionReaccion ||
+                null,
+
+              observaciones:
+                vacuna.observaciones ||
+                null,
+            }),
+          );
+
+        const vacunasCreadas =
+          await transaction
+            .insert(vacunacionesTable)
+            .values(aplicaciones)
+            .returning();
 
         return {
           visita,
@@ -608,10 +1511,23 @@ router.post(
       },
     );
 
-    res.status(201).json({
-      visita: serializeVaccinationVisit(result.visita),
+    const resumenVacunal =
+      await calcularResumenVacunal(
+        pacienteId,
+      );
 
-      vacunas: result.vacunas.map(serializeVaccine),
+    res.status(201).json({
+      visita:
+        serializeVaccinationVisit(
+          result.visita,
+        ),
+
+      vacunas:
+        result.vacunas.map(
+          serializeVaccine,
+        ),
+
+      resumenVacunal,
     });
   },
 );
@@ -620,18 +1536,22 @@ router.post(
 router.put(
   "/vacunaciones/:vacunacionId",
   async (req, res): Promise<void> => {
-    const vacunacionId = readId(req.params.vacunacionId);
+    const vacunacionId = readId(
+      req.params.vacunacionId,
+    );
 
     if (!vacunacionId) {
       res.status(400).json({
-        error: "Identificador de vacunación inválido.",
+        error:
+          "Identificador de vacunación inválido.",
       });
       return;
     }
 
-    const parsed = actualizarVacunaSchema.safeParse(
-      req.body,
-    );
+    const parsed =
+      actualizarVacunaSchema.safeParse(
+        req.body,
+      );
 
     if (!parsed.success) {
       res.status(400).json({
@@ -646,17 +1566,25 @@ router.put(
         ...parsed.data,
         actualizadoEn: new Date(),
       })
-      .where(eq(vacunacionesTable.id, vacunacionId))
+      .where(
+        eq(
+          vacunacionesTable.id,
+          vacunacionId,
+        ),
+      )
       .returning();
 
     if (!updated) {
       res.status(404).json({
-        error: "Vacunación no encontrada.",
+        error:
+          "Vacunación no encontrada.",
       });
       return;
     }
 
-    res.json(serializeVaccine(updated));
+    res.json(
+      serializeVaccine(updated),
+    );
   },
 );
 
@@ -664,23 +1592,32 @@ router.put(
 router.delete(
   "/vacunaciones/:vacunacionId",
   async (req, res): Promise<void> => {
-    const vacunacionId = readId(req.params.vacunacionId);
+    const vacunacionId = readId(
+      req.params.vacunacionId,
+    );
 
     if (!vacunacionId) {
       res.status(400).json({
-        error: "Identificador de vacunación inválido.",
+        error:
+          "Identificador de vacunación inválido.",
       });
       return;
     }
 
     const [deleted] = await db
       .delete(vacunacionesTable)
-      .where(eq(vacunacionesTable.id, vacunacionId))
+      .where(
+        eq(
+          vacunacionesTable.id,
+          vacunacionId,
+        ),
+      )
       .returning();
 
     if (!deleted) {
       res.status(404).json({
-        error: "Vacunación no encontrada.",
+        error:
+          "Vacunación no encontrada.",
       });
       return;
     }
@@ -693,7 +1630,9 @@ router.delete(
 router.delete(
   "/vacunaciones/visitas/:visitaId",
   async (req, res): Promise<void> => {
-    const visitaId = readId(req.params.visitaId);
+    const visitaId = readId(
+      req.params.visitaId,
+    );
 
     if (!visitaId) {
       res.status(400).json({
@@ -705,12 +1644,18 @@ router.delete(
 
     const [deleted] = await db
       .delete(vacunacionVisitasTable)
-      .where(eq(vacunacionVisitasTable.id, visitaId))
+      .where(
+        eq(
+          vacunacionVisitasTable.id,
+          visitaId,
+        ),
+      )
       .returning();
 
     if (!deleted) {
       res.status(404).json({
-        error: "Visita de vacunación no encontrada.",
+        error:
+          "Visita de vacunación no encontrada.",
       });
       return;
     }
@@ -727,18 +1672,22 @@ router.delete(
 router.post(
   "/pacientes/:pacienteId/desparasitaciones",
   async (req, res): Promise<void> => {
-    const pacienteId = readId(req.params.pacienteId);
+    const pacienteId = readId(
+      req.params.pacienteId,
+    );
 
     if (!pacienteId) {
       res.status(400).json({
-        error: "Identificador de paciente inválido.",
+        error:
+          "Identificador de paciente inválido.",
       });
       return;
     }
 
-    const parsed = crearDesparasitacionSchema.safeParse(
-      req.body,
-    );
+    const parsed =
+      crearDesparasitacionSchema.safeParse(
+        req.body,
+      );
 
     if (!parsed.success) {
       res.status(400).json({
@@ -756,80 +1705,136 @@ router.post(
 
     const data = parsed.data;
 
+    if (
+      data.programarProxima &&
+      !data.proximaAplicacion &&
+      !data.frecuenciaDias
+    ) {
+      res.status(400).json({
+        error:
+          "Para programar la próxima desparasitación debes indicar una fecha o frecuencia.",
+      });
+      return;
+    }
+
     const proximaAplicacion =
-      data.proximaAplicacion ||
-      (data.frecuenciaDias
+      data.programarProxima
+        ? data.proximaAplicacion ||
+          (data.frecuenciaDias
+            ? addDays(
+                data.fechaAplicacion,
+                data.frecuenciaDias,
+              )
+            : null)
+        : null;
+
+    const fechaFinCobertura =
+      data.fechaFinCobertura ||
+      (data.duracionDias
         ? addDays(
             data.fechaAplicacion,
-            data.frecuenciaDias,
+            data.duracionDias,
           )
         : null);
 
     const [created] = await db
-      .insert(desparasitacionesTable)
+      .insert(
+        desparasitacionesTable,
+      )
       .values({
         pacienteId,
-        consultaId: data.consultaId,
 
-        fechaAplicacion: data.fechaAplicacion,
+        consultaId:
+          data.consultaId,
 
-        producto: data.producto,
+        fechaAplicacion:
+          data.fechaAplicacion,
+
+        producto:
+          data.producto.trim(),
 
         principioActivo:
-          data.principioActivo || null,
+          data.principioActivo ||
+          null,
 
-        lote: data.lote || null,
-        fabricante: data.fabricante || null,
+        lote:
+          data.lote || null,
 
-        origen: data.origen ?? "Clinica",
+        fabricante:
+          data.fabricante || null,
+
+        origen:
+          data.origen ?? "Clinica",
 
         clinicaExterna:
-          data.clinicaExterna || null,
+          data.clinicaExterna ||
+          null,
 
         medicoResponsable:
-          data.medicoResponsable || null,
+          data.medicoResponsable ||
+          null,
 
-        cubreInternos: data.cubreInternos ?? false,
-        cubreExternos: data.cubreExternos ?? false,
+        cubreInternos:
+          data.cubreInternos ??
+          false,
 
-        duracionDias: data.duracionDias,
+        cubreExternos:
+          data.cubreExternos ??
+          false,
 
-        frecuenciaDias: data.frecuenciaDias,
+        duracionDias:
+          data.duracionDias,
+
+        frecuenciaDias:
+          data.frecuenciaDias,
 
         proximaAplicacion,
+
         programarProxima:
-          data.programarProxima ?? false,
+          data.programarProxima ??
+          false,
 
         tipoProgramacion:
-          data.tipoProgramacion || null,
+          data.programarProxima
+            ? data.tipoProgramacion ||
+              null
+            : null,
 
         proximoProductoTipo:
-          data.proximoProductoTipo || null,
+          data.programarProxima
+            ? data.proximoProductoTipo ||
+              "Por decidir"
+            : null,
 
         proximoProducto:
-          data.proximoProducto || null,
+          data.programarProxima
+            ? data.proximoProducto ||
+              null
+            : null,
 
         decisionMedica:
-          data.decisionMedica || null,
+          data.programarProxima
+            ? data.decisionMedica ||
+              null
+            : null,
 
-        fechaFinCobertura:
-          data.fechaFinCobertura ||
-          (data.duracionDias
-            ? addDays(
-                data.fechaAplicacion,
-                data.duracionDias,
-              )
-            : null),
+        fechaFinCobertura,
+
         pesoAplicacion:
-          data.pesoAplicacion || null,
+          data.pesoAplicacion ||
+          null,
 
-        observaciones: data.observaciones || null,
+        observaciones:
+          data.observaciones ||
+          null,
 
         comprobantePresentado:
-          data.comprobantePresentado ?? false,
+          data.comprobantePresentado ??
+          false,
 
         archivoComprobante:
-          data.archivoComprobante || null,
+          data.archivoComprobante ||
+          null,
       })
       .returning();
 
@@ -841,7 +1846,9 @@ router.post(
       return;
     }
 
-    res.status(201).json(serializeDeworming(created));
+    res.status(201).json(
+      serializeDeworming(created),
+    );
   },
 );
 
@@ -862,7 +1869,9 @@ router.put(
     }
 
     const parsed =
-      actualizarDesparasitacionSchema.safeParse(req.body);
+      actualizarDesparasitacionSchema.safeParse(
+        req.body,
+      );
 
     if (!parsed.success) {
       res.status(400).json({
@@ -871,12 +1880,52 @@ router.put(
       return;
     }
 
+    const cambios = {
+      ...parsed.data,
+
+      proximaAplicacion:
+        parsed.data.programarProxima ===
+        false
+          ? null
+          : parsed.data
+              .proximaAplicacion,
+
+      tipoProgramacion:
+        parsed.data.programarProxima ===
+        false
+          ? null
+          : parsed.data
+              .tipoProgramacion,
+
+      proximoProductoTipo:
+        parsed.data.programarProxima ===
+        false
+          ? null
+          : parsed.data
+              .proximoProductoTipo,
+
+      proximoProducto:
+        parsed.data.programarProxima ===
+        false
+          ? null
+          : parsed.data
+              .proximoProducto,
+
+      decisionMedica:
+        parsed.data.programarProxima ===
+        false
+          ? null
+          : parsed.data
+              .decisionMedica,
+
+      actualizadoEn: new Date(),
+    };
+
     const [updated] = await db
-      .update(desparasitacionesTable)
-      .set({
-        ...parsed.data,
-        actualizadoEn: new Date(),
-      })
+      .update(
+        desparasitacionesTable,
+      )
+      .set(cambios)
       .where(
         eq(
           desparasitacionesTable.id,
@@ -887,12 +1936,15 @@ router.put(
 
     if (!updated) {
       res.status(404).json({
-        error: "Desparasitación no encontrada.",
+        error:
+          "Desparasitación no encontrada.",
       });
       return;
     }
 
-    res.json(serializeDeworming(updated));
+    res.json(
+      serializeDeworming(updated),
+    );
   },
 );
 
@@ -913,7 +1965,9 @@ router.delete(
     }
 
     const [deleted] = await db
-      .delete(desparasitacionesTable)
+      .delete(
+        desparasitacionesTable,
+      )
       .where(
         eq(
           desparasitacionesTable.id,
@@ -924,7 +1978,8 @@ router.delete(
 
     if (!deleted) {
       res.status(404).json({
-        error: "Desparasitación no encontrada.",
+        error:
+          "Desparasitación no encontrada.",
       });
       return;
     }
@@ -941,18 +1996,22 @@ router.delete(
 router.post(
   "/pacientes/:pacienteId/pruebas-felinas",
   async (req, res): Promise<void> => {
-    const pacienteId = readId(req.params.pacienteId);
+    const pacienteId = readId(
+      req.params.pacienteId,
+    );
 
     if (!pacienteId) {
       res.status(400).json({
-        error: "Identificador de paciente inválido.",
+        error:
+          "Identificador de paciente inválido.",
       });
       return;
     }
 
-    const parsed = crearPruebaFelinaSchema.safeParse(
-      req.body,
-    );
+    const parsed =
+      crearPruebaFelinaSchema.safeParse(
+        req.body,
+      );
 
     if (!parsed.success) {
       res.status(400).json({
@@ -974,57 +2033,85 @@ router.post(
       .insert(pruebasFelinasTable)
       .values({
         pacienteId,
-        consultaId: data.consultaId,
 
-        fechaPrueba: data.fechaPrueba,
-        fechaResultado: data.fechaResultado || null,
+        consultaId:
+          data.consultaId,
 
-        origen: data.origen ?? "Clinica",
+        fechaPrueba:
+          data.fechaPrueba,
 
-        tipoPrueba: data.tipoPrueba ?? "FIV/FeLV",
+        fechaResultado:
+          data.fechaResultado ||
+          null,
 
-        laboratorio: data.laboratorio || null,
+        origen:
+          data.origen ?? "Clinica",
+
+        tipoPrueba:
+          data.tipoPrueba ??
+          "FIV/FeLV",
+
+        laboratorio:
+          data.laboratorio || null,
+
         clinicaExterna:
-          data.clinicaExterna || null,
+          data.clinicaExterna ||
+          null,
 
         medicoResponsable:
-          data.medicoResponsable || null,
+          data.medicoResponsable ||
+          null,
 
         medicoExterno:
-          data.medicoExterno || null,
+          data.medicoExterno ||
+          null,
 
-        resultadoFiv: data.resultadoFiv,
-        resultadoFelv: data.resultadoFelv,
+        resultadoFiv:
+          data.resultadoFiv,
+
+        resultadoFelv:
+          data.resultadoFelv,
 
         comprobantePresentado:
-          data.comprobantePresentado ?? false,
+          data.comprobantePresentado ??
+          false,
 
         archivoResultado:
-          data.archivoResultado || null,
+          data.archivoResultado ||
+          null,
 
-        edadMeses: data.edadMeses,
+        edadMeses:
+          data.edadMeses,
 
         decisionLeucemia:
-          data.decisionLeucemia ?? "Pendiente",
+          data.decisionLeucemia ??
+          "Pendiente",
 
         motivoDecision:
-          data.motivoDecision || null,
+          data.motivoDecision ||
+          null,
 
         fechaReevaluacion:
-          data.fechaReevaluacion || null,
+          data.fechaReevaluacion ||
+          null,
 
-        observaciones: data.observaciones || null,
+        observaciones:
+          data.observaciones ||
+          null,
       })
       .returning();
 
     if (!created) {
       res.status(500).json({
-        error: "No se pudo registrar la prueba felina.",
+        error:
+          "No se pudo registrar la prueba felina.",
       });
       return;
     }
 
-    res.status(201).json(serializeFelineTest(created));
+    res.status(201).json(
+      serializeFelineTest(created),
+    );
   },
 );
 
@@ -1045,7 +2132,9 @@ router.put(
     }
 
     const parsed =
-      actualizarPruebaFelinaSchema.safeParse(req.body);
+      actualizarPruebaFelinaSchema.safeParse(
+        req.body,
+      );
 
     if (!parsed.success) {
       res.status(400).json({
@@ -1060,17 +2149,25 @@ router.put(
         ...parsed.data,
         actualizadoEn: new Date(),
       })
-      .where(eq(pruebasFelinasTable.id, pruebaFelinaId))
+      .where(
+        eq(
+          pruebasFelinasTable.id,
+          pruebaFelinaId,
+        ),
+      )
       .returning();
 
     if (!updated) {
       res.status(404).json({
-        error: "Prueba felina no encontrada.",
+        error:
+          "Prueba felina no encontrada.",
       });
       return;
     }
 
-    res.json(serializeFelineTest(updated));
+    res.json(
+      serializeFelineTest(updated),
+    );
   },
 );
 
@@ -1092,12 +2189,18 @@ router.delete(
 
     const [deleted] = await db
       .delete(pruebasFelinasTable)
-      .where(eq(pruebasFelinasTable.id, pruebaFelinaId))
+      .where(
+        eq(
+          pruebasFelinasTable.id,
+          pruebaFelinaId,
+        ),
+      )
       .returning();
 
     if (!deleted) {
       res.status(404).json({
-        error: "Prueba felina no encontrada.",
+        error:
+          "Prueba felina no encontrada.",
       });
       return;
     }

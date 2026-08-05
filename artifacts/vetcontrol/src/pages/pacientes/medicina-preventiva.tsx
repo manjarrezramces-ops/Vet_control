@@ -6,8 +6,11 @@ import {
 } from "@tanstack/react-query";
 import { format } from "date-fns";
 import {
+  AlertTriangle,
   Bug,
   Calendar,
+  CheckCircle2,
+  Clock3,
   Plus,
   ShieldCheck,
   Syringe,
@@ -117,8 +120,34 @@ type PruebaFelina = {
   observaciones: string | null;
 };
 
+type VacunaSugerida = {
+  vacuna: string;
+  motivo: string;
+  requiereDecisionMedica?: boolean;
+};
+
+type ResumenVacunal = {
+  especie: "Perro" | "Gato" | null;
+  etapa: "Cachorro" | "Adulto" | null;
+  intervaloDias: number;
+  estado:
+    | "Sin historial"
+    | "Al corriente"
+    | "Próxima"
+    | "Hoy"
+    | "Atrasada"
+    | "Pendiente de decisión médica";
+  fechaSugerida: string | null;
+  diasDiferencia: number | null;
+  vacunasSiguienteVisita: VacunaSugerida[];
+  vacunasPendientesPosteriores: VacunaSugerida[];
+  esquemaCompleto: boolean;
+  advertencias: string[];
+};
+
 type MedicinaPreventivaResponse = {
   pacienteId: number;
+  resumenVacunal: ResumenVacunal;
   visitasVacunacion: VisitaVacunacion[];
   vacunaciones: Vacunacion[];
   desparasitaciones: Desparasitacion[];
@@ -239,6 +268,52 @@ function estadoColor(estado: string) {
     default:
       return "bg-slate-100 text-slate-700 border-slate-200";
   }
+}
+
+function estadoPreventivoColor(
+  estado: ResumenVacunal["estado"],
+) {
+  switch (estado) {
+    case "Al corriente":
+      return "bg-emerald-100 text-emerald-800 border-emerald-200";
+    case "Próxima":
+      return "bg-yellow-100 text-yellow-800 border-yellow-200";
+    case "Hoy":
+      return "bg-orange-100 text-orange-800 border-orange-200";
+    case "Atrasada":
+      return "bg-red-100 text-red-800 border-red-200";
+    case "Pendiente de decisión médica":
+      return "bg-purple-100 text-purple-800 border-purple-200";
+    default:
+      return "bg-slate-100 text-slate-700 border-slate-200";
+  }
+}
+
+function descripcionFechaPreventiva(
+  resumen: ResumenVacunal,
+): string {
+  if (resumen.esquemaCompleto) {
+    return "El esquema preventivo registrado está completo.";
+  }
+
+  if (!resumen.fechaSugerida) {
+    return "La siguiente fecha todavía no ha sido determinada.";
+  }
+
+  if (resumen.diasDiferencia === null) {
+    return `Fecha sugerida: ${mostrarFecha(resumen.fechaSugerida)}`;
+  }
+
+  if (resumen.diasDiferencia < 0) {
+    const retraso = Math.abs(resumen.diasDiferencia);
+    return `Atrasada ${retraso} día${retraso !== 1 ? "s" : ""}. Correspondía el ${mostrarFecha(resumen.fechaSugerida)}.`;
+  }
+
+  if (resumen.diasDiferencia === 0) {
+    return "La siguiente visita corresponde hoy.";
+  }
+
+  return `Faltan ${resumen.diasDiferencia} día${resumen.diasDiferencia !== 1 ? "s" : ""}. Fecha sugerida: ${mostrarFecha(resumen.fechaSugerida)}.`;
 }
 
 function Campo({
@@ -1243,6 +1318,240 @@ export default function MedicinaPreventivaTab({
           )}
         </div>
       </div>
+
+      <Card className="overflow-hidden border-primary/30">
+        <CardHeader className="border-b bg-primary/5">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                {data.resumenVacunal.esquemaCompleto ? (
+                  <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+                ) : (
+                  <Clock3 className="h-5 w-5 text-primary" />
+                )}
+                Próxima visita preventiva
+              </CardTitle>
+              <p className="text-sm text-muted-foreground mt-1">
+                Recomendación calculada con el historial, la especie y la etapa de vida.
+              </p>
+            </div>
+
+            <Badge
+              className={`border text-sm px-3 py-1 ${estadoPreventivoColor(
+                data.resumenVacunal.estado,
+              )}`}
+            >
+              {data.resumenVacunal.estado}
+            </Badge>
+          </div>
+        </CardHeader>
+
+        <CardContent className="p-6 space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="rounded-xl border bg-muted/10 p-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Especie
+              </p>
+              <p className="font-bold mt-1">
+                {data.resumenVacunal.especie || "No determinada"}
+              </p>
+            </div>
+
+            <div className="rounded-xl border bg-muted/10 p-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Etapa
+              </p>
+              <p className="font-bold mt-1">
+                {data.resumenVacunal.etapa || "No determinada"}
+              </p>
+            </div>
+
+            <div className="rounded-xl border bg-muted/10 p-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Intervalo seleccionado
+              </p>
+              <p className="font-bold mt-1">
+                {data.resumenVacunal.intervaloDias} días
+              </p>
+            </div>
+          </div>
+
+          <div
+            className={`rounded-xl border p-5 ${
+              data.resumenVacunal.estado === "Atrasada"
+                ? "border-red-200 bg-red-50"
+                : data.resumenVacunal.estado === "Hoy"
+                  ? "border-orange-200 bg-orange-50"
+                  : data.resumenVacunal.esquemaCompleto
+                    ? "border-emerald-200 bg-emerald-50"
+                    : "border-primary/20 bg-primary/5"
+            }`}
+          >
+            <div className="flex items-start gap-3">
+              {data.resumenVacunal.esquemaCompleto ? (
+                <CheckCircle2 className="h-5 w-5 text-emerald-600 mt-0.5 shrink-0" />
+              ) : data.resumenVacunal.estado === "Atrasada" ? (
+                <AlertTriangle className="h-5 w-5 text-red-600 mt-0.5 shrink-0" />
+              ) : (
+                <Calendar className="h-5 w-5 text-primary mt-0.5 shrink-0" />
+              )}
+
+              <div>
+                <p className="font-bold">
+                  {descripcionFechaPreventiva(data.resumenVacunal)}
+                </p>
+                {data.resumenVacunal.fechaSugerida && (
+                  <p className="text-sm text-muted-foreground mt-1">
+                    La fecha es una sugerencia automática y puede modificarse por criterio médico.
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {!data.resumenVacunal.esquemaCompleto &&
+            data.resumenVacunal.vacunasSiguienteVisita.length > 0 && (
+              <div className="space-y-3">
+                <div>
+                  <p className="font-bold text-lg">
+                    Aplicar en la siguiente visita
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    Se recomiendan como máximo dos vacunas por visita.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {data.resumenVacunal.vacunasSiguienteVisita.map(
+                    (recomendacion) => (
+                      <div
+                        key={recomendacion.vacuna}
+                        className="rounded-xl border border-primary/20 bg-primary/5 p-4"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="font-bold text-primary">
+                              {recomendacion.vacuna}
+                            </p>
+                            <p className="text-sm text-muted-foreground mt-1">
+                              {recomendacion.motivo}
+                            </p>
+                          </div>
+
+                          {recomendacion.requiereDecisionMedica && (
+                            <Badge
+                              variant="outline"
+                              className="border-purple-200 bg-purple-50 text-purple-700 shrink-0"
+                            >
+                              Decisión médica
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                    ),
+                  )}
+                </div>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    const sugeridas =
+                      data.resumenVacunal.vacunasSiguienteVisita
+                        .filter(
+                          (recomendacion) =>
+                            recomendacion.vacuna !== "Prueba FIV/FeLV" &&
+                            recomendacion.vacuna !== "Reevaluar prueba FIV/FeLV" &&
+                            !recomendacion.vacuna.includes("decisión médica"),
+                        )
+                        .slice(0, 2);
+
+                    if (sugeridas.length === 0) {
+                      toast({
+                        title: "Se requiere decisión médica",
+                        description:
+                          "Primero registra o revisa la prueba FIV/FeLV y la decisión sobre leucemia felina.",
+                      });
+                      return;
+                    }
+
+                    setVacunas(
+                      sugeridas.map((recomendacion) => ({
+                        ...vacunaVacia(),
+                        vacuna: recomendacion.vacuna,
+                        etapa:
+                          data.resumenVacunal.etapa === "Adulto"
+                            ? "Adulto"
+                            : "Cachorro",
+                        fechaAplicacion:
+                          data.resumenVacunal.fechaSugerida || fechaActual(),
+                      })),
+                    );
+
+                    setVisitaVacunacion((actual) => ({
+                      ...actual,
+                      fechaVisita:
+                        data.resumenVacunal.fechaSugerida || fechaActual(),
+                      intervaloDias: String(
+                        data.resumenVacunal.intervaloDias,
+                      ),
+                    }));
+
+                    setFormularioActivo("vacunacion");
+                  }}
+                >
+                  <Syringe className="h-4 w-4 mr-2" />
+                  Preparar registro con vacunas sugeridas
+                </Button>
+              </div>
+            )}
+
+          {data.resumenVacunal.vacunasPendientesPosteriores.length > 0 && (
+            <div className="space-y-3">
+              <div>
+                <p className="font-bold">
+                  Pendientes para visitas posteriores
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  No se proponen juntas en esta visita para respetar el máximo de dos aplicaciones.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                {data.resumenVacunal.vacunasPendientesPosteriores.map(
+                  (recomendacion) => (
+                    <Badge
+                      key={recomendacion.vacuna}
+                      variant="outline"
+                      className="px-3 py-1.5"
+                    >
+                      {recomendacion.vacuna}
+                    </Badge>
+                  ),
+                )}
+              </div>
+            </div>
+          )}
+
+          {data.resumenVacunal.advertencias.length > 0 && (
+            <div className="rounded-xl border border-yellow-200 bg-yellow-50 p-4 space-y-2">
+              <div className="flex items-center gap-2 font-bold text-yellow-800">
+                <AlertTriangle className="h-4 w-4" />
+                Consideraciones clínicas
+              </div>
+
+              {data.resumenVacunal.advertencias.map((advertencia) => (
+                <p
+                  key={advertencia}
+                  className="text-sm text-yellow-800"
+                >
+                  {advertencia}
+                </p>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* =====================================================
           FORMULARIO DE VACUNACIÓN
