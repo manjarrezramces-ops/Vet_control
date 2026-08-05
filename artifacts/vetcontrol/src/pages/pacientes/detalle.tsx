@@ -1,18 +1,49 @@
 import { useParams, Link, useLocation } from "wouter";
-import { useGetPaciente, getGetPacienteQueryKey, useDeletePaciente } from "@workspace/api-client-react";
+import {
+  useGetPaciente,
+  getGetPacienteQueryKey,
+  useDeletePaciente,
+} from "@workspace/api-client-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Separator } from "@/components/ui/separator";
 import {
-  ArrowLeft, Plus, Edit, Trash2, Cat, Dog, Bird, User, FileText, ClipboardList, Calendar, BedDouble, AlertTriangle, Activity, Stethoscope, Weight, Scissors
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
+import { Separator } from "@/components/ui/separator";
+
+import {
+  ArrowLeft,
+  Plus,
+  Edit,
+  Trash2,
+  Cat,
+  Dog,
+  Bird,
+  User,
+  FileText,
+  Calendar,
+  BedDouble,
+  AlertTriangle,
+  Activity,
+  Stethoscope,
+  Weight,
+  Scissors,
 } from "lucide-react";
+
 import {
   AlertDialog,
   AlertDialogAction,
@@ -28,13 +59,14 @@ import {
 export default function PacienteDetalle() {
   const params = useParams();
   const id = Number(params.id);
+
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
   const { data, isLoading, isError } = useGetPaciente(id, {
     query: {
-      enabled: !!id,
+      enabled: Boolean(id),
       queryKey: getGetPacienteQueryKey(id),
     },
   });
@@ -42,95 +74,200 @@ export default function PacienteDetalle() {
   const deletePaciente = useDeletePaciente();
 
   if (isLoading) {
-    return <div className="space-y-8">
-      <Skeleton className="h-12 w-64" />
-      <Skeleton className="h-64 rounded-xl" />
-      <Skeleton className="h-[500px] rounded-xl" />
-    </div>;
+    return (
+      <div className="space-y-8">
+        <Skeleton className="h-12 w-64" />
+        <Skeleton className="h-64 rounded-xl" />
+        <Skeleton className="h-[500px] rounded-xl" />
+      </div>
+    );
   }
 
   if (isError || !data) {
-    return <div className="text-destructive font-medium text-lg">Error al cargar el expediente clínico.</div>;
+    return (
+      <div className="text-destructive font-medium text-lg">
+        Error al cargar el expediente clínico.
+      </div>
+    );
   }
 
-  const { paciente, propietario, propietarioId, consultas, recetas, pruebas } = data;
+  const {
+    paciente,
+    propietario,
+    propietarioId,
+    consultas,
+    recetas,
+  } = data;
 
   const getSpeciesIcon = (especie: string) => {
     switch (especie.toLowerCase()) {
-      case "perro": return <Dog className="h-8 w-8" />;
-      case "gato": return <Cat className="h-8 w-8" />;
-      case "ave": return <Bird className="h-8 w-8" />;
-      default: return <Cat className="h-8 w-8" />;
+      case "perro":
+        return <Dog className="h-8 w-8" />;
+
+      case "gato":
+        return <Cat className="h-8 w-8" />;
+
+      case "ave":
+        return <Bird className="h-8 w-8" />;
+
+      default:
+        return <Cat className="h-8 w-8" />;
     }
   };
 
   const handleDelete = () => {
     deletePaciente.mutate(
-      { pacienteId: id },
       {
-        onSuccess: () => {
-          toast({ title: "Expediente eliminado", description: "El expediente del paciente ha sido eliminado permanentemente." });
+        pacienteId: id,
+      },
+      {
+        onSuccess: async () => {
+          await queryClient.invalidateQueries({
+            queryKey: getGetPacienteQueryKey(id),
+          });
+
+          await queryClient.invalidateQueries({
+            queryKey: ["pacientes"],
+          });
+
+          await queryClient.invalidateQueries({
+            queryKey: ["cliente", propietarioId],
+          });
+
+          toast({
+            title: "Expediente eliminado",
+            description:
+              "El expediente del paciente ha sido eliminado permanentemente.",
+          });
+
           setLocation(`/clientes/${propietarioId}`);
         },
+
         onError: () => {
-          toast({ variant: "destructive", title: "Error", description: "No se pudo eliminar el expediente." });
-        }
-      }
+          toast({
+            variant: "destructive",
+            title: "Error",
+            description:
+              "No se pudo eliminar el expediente del paciente.",
+          });
+        },
+      },
     );
   };
 
-  const age = paciente.fechaNacimiento 
-    ? new Date().getFullYear() - new Date(paciente.fechaNacimiento).getFullYear()
+  const age = paciente.fechaNacimiento
+    ? new Date().getFullYear() -
+      new Date(paciente.fechaNacimiento).getFullYear()
     : null;
 
   return (
     <div className="space-y-8">
-      {/* Header */}
+      {/* Encabezado */}
       <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-6">
         <div className="flex items-start gap-4">
           <Link href={`/clientes/${propietarioId}`}>
-            <Button variant="outline" size="icon" className="rounded-full mt-1 shrink-0">
+            <Button
+              variant="outline"
+              size="icon"
+              className="rounded-full mt-1 shrink-0"
+            >
               <ArrowLeft className="h-5 w-5" />
             </Button>
           </Link>
+
           <div className="flex items-start gap-4">
             <div className="h-16 w-16 rounded-full bg-primary flex items-center justify-center text-primary-foreground shadow-md shrink-0">
               {getSpeciesIcon(paciente.especie)}
             </div>
+
             <div>
-              <h1 className="text-4xl font-bold tracking-tight text-foreground">{paciente.nombre}{paciente.apellido ? ` ${paciente.apellido}` : ""}</h1>
+              <h1 className="text-4xl font-bold tracking-tight text-foreground">
+                {paciente.nombre}
+                {paciente.apellido
+                  ? ` ${paciente.apellido}`
+                  : ""}
+              </h1>
+
               <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground mt-2 font-medium">
-                <Link href={`/clientes/${propietarioId}`} className="hover:text-primary transition-colors flex items-center gap-1.5 bg-muted/50 px-2 py-1 rounded-md">
-                  <User className="h-4 w-4" /> {propietario}
+                <Link
+                  href={`/clientes/${propietarioId}`}
+                  className="hover:text-primary transition-colors flex items-center gap-1.5 bg-muted/50 px-2 py-1 rounded-md"
+                >
+                  <User className="h-4 w-4" />
+                  {propietario}
                 </Link>
-                <span className="text-muted-foreground/40">•</span>
-                <span className="flex items-center gap-1.5"><Cat className="h-4 w-4"/> {paciente.especie} {paciente.raza ? `· ${paciente.raza}` : ""}</span>
+
+                <span className="text-muted-foreground/40">
+                  •
+                </span>
+
+                <span className="flex items-center gap-1.5">
+                  {paciente.especie.toLowerCase() ===
+                  "perro" ? (
+                    <Dog className="h-4 w-4" />
+                  ) : (
+                    <Cat className="h-4 w-4" />
+                  )}
+
+                  {paciente.especie}
+
+                  {paciente.raza
+                    ? ` · ${paciente.raza}`
+                    : ""}
+                </span>
               </div>
             </div>
           </div>
         </div>
+
         <div className="flex items-center gap-3">
           <Link href={`/pacientes/${id}/editar`}>
-            <Button variant="outline" size="lg" className="shadow-sm">
-              <Edit className="mr-2 h-4 w-4" /> Editar Expediente
+            <Button
+              variant="outline"
+              size="lg"
+              className="shadow-sm"
+            >
+              <Edit className="mr-2 h-4 w-4" />
+              Editar Expediente
             </Button>
           </Link>
+
           <AlertDialog>
             <AlertDialogTrigger asChild>
-              <Button variant="outline" size="lg" className="text-destructive hover:bg-destructive hover:text-destructive-foreground shadow-sm">
+              <Button
+                variant="outline"
+                size="lg"
+                className="text-destructive hover:bg-destructive hover:text-destructive-foreground shadow-sm"
+                disabled={deletePaciente.isPending}
+              >
                 <Trash2 className="h-4 w-4" />
               </Button>
             </AlertDialogTrigger>
+
             <AlertDialogContent>
               <AlertDialogHeader>
-                <AlertDialogTitle>¿Eliminar expediente clínico?</AlertDialogTitle>
+                <AlertDialogTitle>
+                  ¿Eliminar expediente clínico?
+                </AlertDialogTitle>
+
                 <AlertDialogDescription className="text-base">
-                  Esta acción no se puede deshacer. Se eliminarán permanentemente el perfil del paciente y todo su historial de consultas, recetas y pruebas.
+                  Esta acción no se puede deshacer. Se
+                  eliminarán permanentemente el perfil del
+                  paciente y todo su historial de consultas,
+                  recetas, pruebas, procedimientos y
+                  hospitalizaciones.
                 </AlertDialogDescription>
               </AlertDialogHeader>
+
               <AlertDialogFooter>
-                <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                <AlertDialogCancel>
+                  Cancelar
+                </AlertDialogCancel>
+
+                <AlertDialogAction
+                  onClick={handleDelete}
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                >
                   Sí, eliminar todo
                 </AlertDialogAction>
               </AlertDialogFooter>
@@ -140,59 +277,116 @@ export default function PacienteDetalle() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-        {/* Info Column Sidebar */}
+        {/* Columna lateral */}
         <div className="lg:col-span-1 space-y-6">
           <Card className="shadow-sm border-t-4 border-t-primary">
             <CardHeader className="bg-muted/10 pb-4 border-b">
               <CardTitle className="text-lg flex items-center gap-2">
-                <Activity className="h-5 w-5 text-primary" /> Ficha Técnica
+                <Activity className="h-5 w-5 text-primary" />
+                Ficha Técnica
               </CardTitle>
             </CardHeader>
+
             <CardContent className="pt-6 space-y-5">
               <div>
-                <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">Estado General</div>
-                <Badge variant={paciente.estado === "Activo" ? "default" : paciente.estado === "Fallecido" ? "destructive" : "secondary"} className="text-sm px-3 py-1">
+                <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">
+                  Estado General
+                </div>
+
+                <Badge
+                  variant={
+                    paciente.estado === "Activo"
+                      ? "default"
+                      : paciente.estado === "Fallecido"
+                        ? "destructive"
+                        : "secondary"
+                  }
+                  className="text-sm px-3 py-1"
+                >
                   {paciente.estado}
                 </Badge>
               </div>
+
               <Separator />
+
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">Sexo</div>
-                  <div className="font-semibold text-base">{paciente.sexo || "No esp."}</div>
+                  <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">
+                    Sexo
+                  </div>
+
+                  <div className="font-semibold text-base">
+                    {paciente.sexo || "No esp."}
+                  </div>
                 </div>
+
                 <div>
-                  <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">Edad</div>
-                  <div className="font-semibold text-base">{age !== null ? `${age} años` : "Desc."}</div>
+                  <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">
+                    Edad
+                  </div>
+
+                  <div className="font-semibold text-base">
+                    {age !== null
+                      ? `${age} años`
+                      : "Desc."}
+                  </div>
                 </div>
+
                 <div>
-                  <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1 flex items-center gap-1"><Weight className="h-3 w-3" /> Peso</div>
-                  <div className="font-semibold text-base">{paciente.peso ? `${paciente.peso} kg` : "-"}</div>
+                  <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1 flex items-center gap-1">
+                    <Weight className="h-3 w-3" />
+                    Peso
+                  </div>
+
+                  <div className="font-semibold text-base">
+                    {paciente.peso
+                      ? `${paciente.peso} kg`
+                      : "-"}
+                  </div>
                 </div>
+
                 <div>
-                  <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">Castrado</div>
-                  <div className="font-semibold text-base">{paciente.esterilizado ? "Sí" : "No"}</div>
+                  <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">
+                    Castrado
+                  </div>
+
+                  <div className="font-semibold text-base">
+                    {paciente.esterilizado
+                      ? "Sí"
+                      : "No"}
+                  </div>
                 </div>
               </div>
 
               {paciente.microchip && (
                 <>
                   <Separator />
+
                   <div>
-                    <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Registro / Microchip</div>
-                    <div className="font-mono text-sm font-bold bg-muted/40 p-2 rounded-md border text-center">{paciente.microchip}</div>
+                    <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+                      Registro / Microchip
+                    </div>
+
+                    <div className="font-mono text-sm font-bold bg-muted/40 p-2 rounded-md border text-center">
+                      {paciente.microchip}
+                    </div>
                   </div>
                 </>
               )}
-              
+
               {paciente.alergias && (
                 <>
                   <Separator />
+
                   <div className="bg-destructive/5 border border-destructive/20 p-4 rounded-xl">
                     <div className="text-xs font-bold text-destructive uppercase tracking-wider flex items-center gap-1 mb-2">
-                      <AlertTriangle className="h-3.5 w-3.5" /> Alergias
+                      <AlertTriangle className="h-3.5 w-3.5" />
+                      Alergias
                     </div>
-                    <p className="text-sm font-medium text-destructive/90">{paciente.alergias}</p>
+
+                    <p className="text-sm font-medium text-destructive/90">
+                      {paciente.alergias}
+                    </p>
                   </div>
                 </>
               )}
@@ -200,80 +394,147 @@ export default function PacienteDetalle() {
           </Card>
         </div>
 
-        {/* Clinical History Main Area */}
+        {/* Historial clínico */}
         <div className="lg:col-span-3">
-          <Tabs defaultValue="consultas" className="w-full">
+          <Tabs
+            defaultValue="consultas"
+            className="w-full"
+          >
             <TabsList className="w-full justify-start h-14 bg-transparent border-b-2 rounded-none p-0 mb-8 space-x-8 overflow-x-auto">
-              <TabsTrigger 
-                value="consultas" 
+              <TabsTrigger
+                value="consultas"
                 className="data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none rounded-none px-2 h-14 text-base font-semibold data-[state=active]:text-primary text-muted-foreground"
               >
-                <Stethoscope className="w-5 h-5 mr-2" /> Consultas Médicas
+                <Stethoscope className="w-5 h-5 mr-2" />
+                Consultas Médicas
               </TabsTrigger>
-              <TabsTrigger 
-                value="recetas" 
+
+              <TabsTrigger
+                value="recetas"
                 className="data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none rounded-none px-2 h-14 text-base font-semibold data-[state=active]:text-primary text-muted-foreground"
               >
-                <FileText className="w-5 h-5 mr-2" /> Recetario
+                <FileText className="w-5 h-5 mr-2" />
+                Recetario
               </TabsTrigger>
-              <TabsTrigger 
-                value="hospitalizaciones" 
+
+              <TabsTrigger
+                value="hospitalizaciones"
                 className="data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none rounded-none px-2 h-14 text-base font-semibold data-[state=active]:text-primary text-muted-foreground"
               >
-                <BedDouble className="w-5 h-5 mr-2" /> Hospitalización
+                <BedDouble className="w-5 h-5 mr-2" />
+                Hospitalización
               </TabsTrigger>
-              <TabsTrigger 
-                value="procedimientos" 
+
+              <TabsTrigger
+                value="procedimientos"
                 className="data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none rounded-none px-2 h-14 text-base font-semibold data-[state=active]:text-primary text-muted-foreground"
               >
-                <Scissors className="w-5 h-5 mr-2" /> Procedimientos
+                <Scissors className="w-5 h-5 mr-2" />
+                Procedimientos
               </TabsTrigger>
             </TabsList>
 
-            <TabsContent value="consultas" className="space-y-6">
+            {/* Consultas */}
+            <TabsContent
+              value="consultas"
+              className="space-y-6"
+            >
               <div className="flex justify-between items-center mb-6">
                 <div>
-                  <h3 className="text-xl font-bold tracking-tight text-foreground">Historial de Consultas</h3>
-                  <p className="text-sm text-muted-foreground mt-1">Registro cronológico de visitas clínicas.</p>
+                  <h3 className="text-xl font-bold tracking-tight text-foreground">
+                    Historial de Consultas
+                  </h3>
+
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Registro cronológico de visitas clínicas.
+                  </p>
                 </div>
-                <Link href={`/pacientes/${id}/consultas/nuevo`}>
-                  <Button size="lg" className="shadow-sm"><Plus className="w-5 h-5 mr-2"/> Nueva Consulta</Button>
+
+                <Link
+                  href={`/pacientes/${id}/consultas/nuevo`}
+                >
+                  <Button
+                    size="lg"
+                    className="shadow-sm"
+                  >
+                    <Plus className="w-5 h-5 mr-2" />
+                    Nueva Consulta
+                  </Button>
                 </Link>
               </div>
-              
+
               {consultas.length === 0 ? (
                 <div className="text-center py-20 text-muted-foreground border-2 border-dashed rounded-xl bg-muted/10">
                   <Stethoscope className="h-12 w-12 mx-auto mb-4 opacity-20" />
-                  <p className="text-lg font-medium text-foreground">Aún no hay historial clínico</p>
-                  <p className="text-sm mt-1">Apertura la primera consulta médica de este paciente.</p>
+
+                  <p className="text-lg font-medium text-foreground">
+                    Aún no hay historial clínico
+                  </p>
+
+                  <p className="text-sm mt-1">
+                    Abre la primera consulta médica de este
+                    paciente.
+                  </p>
                 </div>
               ) : (
                 <div className="grid gap-4">
-                  {consultas.map(consulta => (
-                    <Card key={consulta.id} className="hover:shadow-md transition-shadow group overflow-hidden border-l-4 border-l-transparent hover:border-l-primary">
+                  {consultas.map((consulta) => (
+                    <Card
+                      key={consulta.id}
+                      className="hover:shadow-md transition-shadow group overflow-hidden border-l-4 border-l-transparent hover:border-l-primary"
+                    >
                       <CardContent className="p-0 flex flex-col sm:flex-row items-stretch">
                         <div className="p-6 bg-muted/20 border-r flex flex-col justify-center min-w-[180px] shrink-0">
                           <div className="flex items-center gap-2 font-bold text-lg text-primary">
                             <Calendar className="w-4 h-4" />
-                            {format(new Date(consulta.fecha), "dd/MM/yyyy")}
+
+                            {format(
+                              new Date(
+                                `${consulta.fecha}T12:00:00`,
+                              ),
+                              "dd/MM/yyyy",
+                            )}
                           </div>
-                          {consulta.medico && <div className="text-sm font-medium text-muted-foreground mt-1">Dr. {consulta.medico}</div>}
-                        </div>
-                        <div className="p-6 flex-1 flex flex-col justify-center space-y-2">
-                          <div>
-                            <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">Motivo Principal</div>
-                            <p className="text-base font-bold text-foreground">{consulta.motivo}</p>
-                          </div>
-                          {consulta.diagnostico && (
-                            <div className="bg-primary/5 p-3 rounded-lg border border-primary/10 inline-block self-start mt-2">
-                              <span className="text-xs font-bold text-primary uppercase tracking-wider mr-2">Diagnóstico:</span>
-                              <span className="text-sm font-medium">{consulta.diagnostico}</span>
+
+                          {consulta.medico && (
+                            <div className="text-sm font-medium text-muted-foreground mt-1">
+                              Dr. {consulta.medico}
                             </div>
                           )}
                         </div>
+
+                        <div className="p-6 flex-1 flex flex-col justify-center space-y-2">
+                          <div>
+                            <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">
+                              Motivo Principal
+                            </div>
+
+                            <p className="text-base font-bold text-foreground">
+                              {consulta.motivo}
+                            </p>
+                          </div>
+
+                          {consulta.diagnostico && (
+                            <div className="bg-primary/5 p-3 rounded-lg border border-primary/10 inline-block self-start mt-2">
+                              <span className="text-xs font-bold text-primary uppercase tracking-wider mr-2">
+                                Diagnóstico:
+                              </span>
+
+                              <span className="text-sm font-medium">
+                                {consulta.diagnostico}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+
                         <div className="p-6 flex items-center justify-end border-l bg-muted/5 sm:bg-transparent sm:border-l-0">
-                          <Link href={`/consultas/${consulta.id}`}>
-                            <Button variant="outline" className="font-medium group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
+                          <Link
+                            href={`/consultas/${consulta.id}`}
+                          >
+                            <Button
+                              variant="outline"
+                              className="font-medium group-hover:bg-primary group-hover:text-primary-foreground transition-colors"
+                            >
                               Ver Expediente
                             </Button>
                           </Link>
@@ -285,48 +546,96 @@ export default function PacienteDetalle() {
               )}
             </TabsContent>
 
-            <TabsContent value="recetas" className="space-y-6">
+            {/* Recetas */}
+            <TabsContent
+              value="recetas"
+              className="space-y-6"
+            >
               <div className="flex justify-between items-center mb-6">
                 <div>
-                  <h3 className="text-xl font-bold tracking-tight text-foreground">Recetario Médico</h3>
-                  <p className="text-sm text-muted-foreground mt-1">Historial de tratamientos prescritos.</p>
+                  <h3 className="text-xl font-bold tracking-tight text-foreground">
+                    Recetario Médico
+                  </h3>
+
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Historial de tratamientos prescritos.
+                  </p>
                 </div>
-                <Link href={`/pacientes/${id}/recetas/nuevo`}>
-                  <Button size="lg" className="shadow-sm"><Plus className="w-5 h-5 mr-2"/> Emitir Receta</Button>
+
+                <Link
+                  href={`/pacientes/${id}/recetas/nuevo`}
+                >
+                  <Button
+                    size="lg"
+                    className="shadow-sm"
+                  >
+                    <Plus className="w-5 h-5 mr-2" />
+                    Emitir Receta
+                  </Button>
                 </Link>
               </div>
-              
+
               {recetas.length === 0 ? (
                 <div className="text-center py-20 text-muted-foreground border-2 border-dashed rounded-xl bg-muted/10">
                   <FileText className="h-12 w-12 mx-auto mb-4 opacity-20" />
-                  <p className="text-lg font-medium text-foreground">Sin recetas registradas</p>
-                  <p className="text-sm mt-1">Adjunta el archivo de la primera receta.</p>
+
+                  <p className="text-lg font-medium text-foreground">
+                    Sin recetas registradas
+                  </p>
+
+                  <p className="text-sm mt-1">
+                    Registra la primera receta del paciente.
+                  </p>
                 </div>
               ) : (
                 <div className="grid gap-4">
-                  {recetas.map(receta => (
-                    <Card key={receta.id} className="hover:shadow-md transition-shadow group overflow-hidden border-l-4 border-l-transparent hover:border-l-primary">
+                  {recetas.map((receta) => (
+                    <Card
+                      key={receta.id}
+                      className="hover:shadow-md transition-shadow group overflow-hidden border-l-4 border-l-transparent hover:border-l-primary"
+                    >
                       <CardContent className="p-0 flex items-center">
                         <div className="p-5 bg-muted/20 border-r flex flex-col justify-center min-w-[140px] shrink-0">
                           <div className="flex items-center gap-2 font-bold text-base text-primary">
                             <Calendar className="w-4 h-4" />
-                            {format(new Date(receta.fecha), "dd/MM/yyyy")}
+
+                            {format(
+                              new Date(
+                                `${receta.fecha}T12:00:00`,
+                              ),
+                              "dd/MM/yyyy",
+                            )}
                           </div>
                         </div>
+
                         <div className="p-5 flex-1 flex items-center gap-3">
-                          {(receta as typeof receta & { archivoImagen?: string | null }).archivoImagen ? (
+                          {(
+                            receta as typeof receta & {
+                              archivoImagen?: string | null;
+                            }
+                          ).archivoImagen ? (
                             <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200 border font-semibold text-xs">
                               Archivo adjunto
                             </Badge>
                           ) : (
-                            <Badge variant="outline" className="text-muted-foreground text-xs font-semibold">
+                            <Badge
+                              variant="outline"
+                              className="text-muted-foreground text-xs font-semibold"
+                            >
                               Sin archivo
                             </Badge>
                           )}
                         </div>
+
                         <div className="p-5 shrink-0 border-l bg-muted/5">
-                          <Link href={`/recetas/${receta.id}`}>
-                            <Button variant="outline" size="sm" className="font-medium group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
+                          <Link
+                            href={`/recetas/${receta.id}`}
+                          >
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="font-medium group-hover:bg-primary group-hover:text-primary-foreground transition-colors"
+                            >
                               Ver receta
                             </Button>
                           </Link>
@@ -338,29 +647,68 @@ export default function PacienteDetalle() {
               )}
             </TabsContent>
 
-            <TabsContent value="hospitalizaciones" className="space-y-6">
+            {/* Hospitalizaciones */}
+            <TabsContent
+              value="hospitalizaciones"
+              className="space-y-6"
+            >
               <div className="flex justify-between items-center mb-6">
                 <div>
-                  <h3 className="text-xl font-bold tracking-tight text-foreground">Registro de Hospitalización</h3>
-                  <p className="text-sm text-muted-foreground mt-1">Estancias médicas y cuidados intensivos.</p>
+                  <h3 className="text-xl font-bold tracking-tight text-foreground">
+                    Registro de Hospitalización
+                  </h3>
+
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Estancias médicas y cuidados intensivos.
+                  </p>
                 </div>
-                <Link href={`/pacientes/${id}/hospitalizaciones/nuevo`}>
-                  <Button size="lg" className="shadow-sm"><Plus className="w-5 h-5 mr-2" /> Ingresar Paciente</Button>
+
+                <Link
+                  href={`/pacientes/${id}/hospitalizaciones/nuevo`}
+                >
+                  <Button
+                    size="lg"
+                    className="shadow-sm"
+                  >
+                    <Plus className="w-5 h-5 mr-2" />
+                    Ingresar Paciente
+                  </Button>
                 </Link>
               </div>
+
               <HospitalizacionesTab pacienteId={id} />
             </TabsContent>
 
-            <TabsContent value="procedimientos" className="space-y-6">
+            {/* Procedimientos */}
+            <TabsContent
+              value="procedimientos"
+              className="space-y-6"
+            >
               <div className="flex justify-between items-center mb-6">
                 <div>
-                  <h3 className="text-xl font-bold tracking-tight text-foreground">Procedimientos</h3>
-                  <p className="text-sm text-muted-foreground mt-1">Cirugías, profilaxis dental, imagenología y más.</p>
+                  <h3 className="text-xl font-bold tracking-tight text-foreground">
+                    Procedimientos
+                  </h3>
+
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Cirugías, profilaxis dental,
+                    imagenología y más.
+                  </p>
                 </div>
-                <Link href={`/pacientes/${id}/procedimientos/nuevo`}>
-                  <Button size="lg" className="shadow-sm"><Plus className="w-5 h-5 mr-2" /> Nuevo Procedimiento</Button>
+
+                <Link
+                  href={`/pacientes/${id}/procedimientos/nuevo`}
+                >
+                  <Button
+                    size="lg"
+                    className="shadow-sm"
+                  >
+                    <Plus className="w-5 h-5 mr-2" />
+                    Nuevo Procedimiento
+                  </Button>
                 </Link>
               </div>
+
               <ProcedimientosTab pacienteId={id} />
             </TabsContent>
           </Tabs>
@@ -370,70 +718,171 @@ export default function PacienteDetalle() {
   );
 }
 
-// ── Sub-componente procedimientos ─────────────────────────────────────────
+/* =========================================================
+   PROCEDIMIENTOS
+========================================================= */
+
 const tipoColorProc: Record<string, string> = {
-  "Cirugía":           "bg-red-100 text-red-800 border-red-200",
-  "Profilaxis Dental": "bg-blue-100 text-blue-800 border-blue-200",
-  "Radiografía":       "bg-purple-100 text-purple-800 border-purple-200",
-  "Ultrasonido":       "bg-cyan-100 text-cyan-800 border-cyan-200",
-  "Electrocardiograma":"bg-orange-100 text-orange-800 border-orange-200",
-  "Vacunación":        "bg-emerald-100 text-emerald-800 border-emerald-200",
-  "Desparasitación":   "bg-yellow-100 text-yellow-800 border-yellow-200",
+  Cirugía:
+    "bg-red-100 text-red-800 border-red-200",
+
+  "Profilaxis Dental":
+    "bg-blue-100 text-blue-800 border-blue-200",
+
+  Radiografía:
+    "bg-purple-100 text-purple-800 border-purple-200",
+
+  Ultrasonido:
+    "bg-cyan-100 text-cyan-800 border-cyan-200",
+
+  Electrocardiograma:
+    "bg-orange-100 text-orange-800 border-orange-200",
+
+  Vacunación:
+    "bg-emerald-100 text-emerald-800 border-emerald-200",
+
+  Desparasitación:
+    "bg-yellow-100 text-yellow-800 border-yellow-200",
 };
 
-function ProcedimientosTab({ pacienteId }: { pacienteId: number }) {
-  const BASE = (import.meta.env.BASE_URL as string).replace(/\/$/, "");
+function ProcedimientosTab({
+  pacienteId,
+}: {
+  pacienteId: number;
+}) {
+  const BASE = (
+    import.meta.env.BASE_URL as string
+  ).replace(/\/$/, "");
 
-  const { data: procs = [], isLoading } = useQuery<Array<{
-    id: number; fecha: string; tipo: string; descripcion: string | null;
-    veterinario: string | null; resultado: string | null;
-  }>>({
+  const {
+    data: procs = [],
+    isLoading,
+  } = useQuery<
+    Array<{
+      id: number;
+      fecha: string;
+      tipo: string;
+      descripcion: string | null;
+      veterinario: string | null;
+      resultado: string | null;
+    }>
+  >({
     queryKey: ["procedimientos", pacienteId],
+
     queryFn: async () => {
-      const res = await fetch(`${BASE}/api/pacientes/${pacienteId}/procedimientos`);
-      if (!res.ok) throw new Error("Error");
+      const res = await fetch(
+        `${BASE}/api/pacientes/${pacienteId}/procedimientos`,
+      );
+
+      if (!res.ok) {
+        throw new Error(
+          "No se pudieron cargar los procedimientos.",
+        );
+      }
+
       return res.json();
     },
-    enabled: !!pacienteId,
+
+    enabled: Boolean(pacienteId),
   });
 
-  if (isLoading) return <div className="py-12 flex justify-center"><div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" /></div>;
+  if (isLoading) {
+    return (
+      <div className="py-12 flex justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+      </div>
+    );
+  }
 
-  if (procs.length === 0) return (
-    <div className="text-center py-20 text-muted-foreground border-2 border-dashed rounded-xl bg-muted/10">
-      <Scissors className="h-12 w-12 mx-auto mb-4 opacity-20" />
-      <p className="text-lg font-medium text-foreground">Sin procedimientos registrados</p>
-      <p className="text-sm mt-1">Agrega cirugías, profilaxis dental, radiografías y más.</p>
-    </div>
-  );
+  if (procs.length === 0) {
+    return (
+      <div className="text-center py-20 text-muted-foreground border-2 border-dashed rounded-xl bg-muted/10">
+        <Scissors className="h-12 w-12 mx-auto mb-4 opacity-20" />
+
+        <p className="text-lg font-medium text-foreground">
+          Sin procedimientos registrados
+        </p>
+
+        <p className="text-sm mt-1">
+          Agrega cirugías, profilaxis dental,
+          radiografías y más.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="grid gap-4">
-      {procs.map(p => (
-        <Card key={p.id} className="hover:shadow-md transition-shadow group overflow-hidden border-l-4 border-l-transparent hover:border-l-primary">
+      {procs.map((procedimiento) => (
+        <Card
+          key={procedimiento.id}
+          className="hover:shadow-md transition-shadow group overflow-hidden border-l-4 border-l-transparent hover:border-l-primary"
+        >
           <CardContent className="p-0 flex flex-col sm:flex-row items-stretch">
             <div className="p-6 bg-muted/20 border-r flex flex-col justify-center min-w-[160px] shrink-0">
               <div className="flex items-center gap-2 font-bold text-base text-primary mb-1">
                 <Calendar className="w-4 h-4" />
-                {format(new Date(p.fecha), "dd/MM/yyyy")}
+
+                {format(
+                  new Date(
+                    `${procedimiento.fecha}T12:00:00`,
+                  ),
+                  "dd/MM/yyyy",
+                )}
               </div>
-              {p.veterinario && <div className="text-sm text-muted-foreground">Dr. {p.veterinario}</div>}
-            </div>
-            <div className="p-6 flex-1 flex flex-col justify-center space-y-2">
-              <Badge className={`self-start text-xs font-bold px-2 py-0.5 border ${tipoColorProc[p.tipo] ?? "bg-slate-100 text-slate-700 border-slate-200"}`}>
-                {p.tipo}
-              </Badge>
-              {p.descripcion && <p className="text-sm text-foreground/80 line-clamp-2">{p.descripcion}</p>}
-              {p.resultado && (
-                <div className="bg-primary/5 px-3 py-1.5 rounded-lg border border-primary/10 inline-block self-start">
-                  <span className="text-xs font-bold text-primary uppercase tracking-wider mr-2">Resultado:</span>
-                  <span className="text-sm font-medium">{p.resultado.slice(0, 80)}{p.resultado.length > 80 ? "…" : ""}</span>
+
+              {procedimiento.veterinario && (
+                <div className="text-sm text-muted-foreground">
+                  Dr. {procedimiento.veterinario}
                 </div>
               )}
             </div>
+
+            <div className="p-6 flex-1 flex flex-col justify-center space-y-2">
+              <Badge
+                className={`self-start text-xs font-bold px-2 py-0.5 border ${
+                  tipoColorProc[procedimiento.tipo] ??
+                  "bg-slate-100 text-slate-700 border-slate-200"
+                }`}
+              >
+                {procedimiento.tipo}
+              </Badge>
+
+              {procedimiento.descripcion && (
+                <p className="text-sm text-foreground/80 line-clamp-2">
+                  {procedimiento.descripcion}
+                </p>
+              )}
+
+              {procedimiento.resultado && (
+                <div className="bg-primary/5 px-3 py-1.5 rounded-lg border border-primary/10 inline-block self-start">
+                  <span className="text-xs font-bold text-primary uppercase tracking-wider mr-2">
+                    Resultado:
+                  </span>
+
+                  <span className="text-sm font-medium">
+                    {procedimiento.resultado.slice(
+                      0,
+                      80,
+                    )}
+
+                    {procedimiento.resultado.length >
+                    80
+                      ? "…"
+                      : ""}
+                  </span>
+                </div>
+              )}
+            </div>
+
             <div className="p-6 flex items-center justify-end border-l bg-muted/5 sm:bg-transparent sm:border-l-0">
-              <Link href={`/procedimientos/${p.id}`}>
-                <Button variant="outline" className="font-medium group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
+              <Link
+                href={`/procedimientos/${procedimiento.id}`}
+              >
+                <Button
+                  variant="outline"
+                  className="font-medium group-hover:bg-primary group-hover:text-primary-foreground transition-colors"
+                >
                   Ver detalle
                 </Button>
               </Link>
@@ -445,104 +894,250 @@ function ProcedimientosTab({ pacienteId }: { pacienteId: number }) {
   );
 }
 
-// ── Sub-componente hospitalizaciones ──────────────────────────────────────
+/* =========================================================
+   HOSPITALIZACIONES
+========================================================= */
+
 const estadoColor: Record<string, string> = {
-  "Crítico":         "bg-red-100 text-red-800 border-red-200",
-  "Grave":           "bg-orange-100 text-orange-800 border-orange-200",
-  "En observación":  "bg-yellow-100 text-yellow-800 border-yellow-200",
-  "Estable":         "bg-blue-100 text-blue-800 border-blue-200",
-  "En recuperación": "bg-emerald-100 text-emerald-800 border-emerald-200",
-  "Hospitalizado":   "bg-slate-100 text-slate-700 border-slate-200",
+  Crítico:
+    "bg-red-100 text-red-800 border-red-200",
+
+  Grave:
+    "bg-orange-100 text-orange-800 border-orange-200",
+
+  "En observación":
+    "bg-yellow-100 text-yellow-800 border-yellow-200",
+
+  Estable:
+    "bg-blue-100 text-blue-800 border-blue-200",
+
+  "En recuperación":
+    "bg-emerald-100 text-emerald-800 border-emerald-200",
+
+  Hospitalizado:
+    "bg-slate-100 text-slate-700 border-slate-200",
 };
 
-function HospitalizacionesTab({ pacienteId }: { pacienteId: number }) {
-  const BASE = (import.meta.env.BASE_URL as string).replace(/\/$/, "");
+function HospitalizacionesTab({
+  pacienteId,
+}: {
+  pacienteId: number;
+}) {
+  const BASE = (
+    import.meta.env.BASE_URL as string
+  ).replace(/\/$/, "");
 
-  const { data: hosps = [], isLoading } = useQuery<Array<{
-    id: number; estado: string; motivo: string; fechaIngreso: string;
-    fechaAlta: string | null; tipoAlta: string | null; jaula: string | null;
-    veterinarioResponsable: string | null;
-  }>>({
+  const {
+    data: hosps = [],
+    isLoading,
+  } = useQuery<
+    Array<{
+      id: number;
+      estado: string;
+      motivo: string;
+      fechaIngreso: string;
+      fechaAlta: string | null;
+      tipoAlta: string | null;
+      jaula: string | null;
+      veterinarioResponsable: string | null;
+    }>
+  >({
     queryKey: ["hospitalizaciones", pacienteId],
+
     queryFn: async () => {
-      const res = await fetch(`${BASE}/api/pacientes/${pacienteId}/hospitalizaciones`);
-      if (!res.ok) throw new Error("Error");
+      const res = await fetch(
+        `${BASE}/api/pacientes/${pacienteId}/hospitalizaciones`,
+      );
+
+      if (!res.ok) {
+        throw new Error(
+          "No se pudieron cargar las hospitalizaciones.",
+        );
+      }
+
       return res.json();
     },
-    enabled: !!pacienteId,
+
+    enabled: Boolean(pacienteId),
   });
 
-  if (isLoading) return <div className="py-12 flex justify-center"><div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent shadow-sm" /></div>;
+  if (isLoading) {
+    return (
+      <div className="py-12 flex justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent shadow-sm" />
+      </div>
+    );
+  }
+
+  if (hosps.length === 0) {
+    return (
+      <div className="text-center py-20 text-muted-foreground border-2 border-dashed rounded-xl bg-muted/10">
+        <BedDouble className="h-12 w-12 mx-auto mb-4 opacity-20" />
+
+        <p className="text-lg font-medium text-foreground">
+          No hay registros de internamiento
+        </p>
+
+        <p className="text-sm mt-1">
+          El paciente no ha sido ingresado
+          previamente.
+        </p>
+      </div>
+    );
+  }
 
   return (
-    <>
-      {hosps.length === 0 ? (
-        <div className="text-center py-20 text-muted-foreground border-2 border-dashed rounded-xl bg-muted/10">
-          <BedDouble className="h-12 w-12 mx-auto mb-4 opacity-20" />
-          <p className="text-lg font-medium text-foreground">No hay registros de internamiento</p>
-          <p className="text-sm mt-1">El paciente no ha sido ingresado a piso previamente.</p>
-        </div>
-      ) : (
-        <div className="grid gap-4">
-          {hosps.map(h => {
-            const activa = !h.fechaAlta;
-            const dias = h.fechaAlta
-              ? Math.ceil((new Date(h.fechaAlta).getTime() - new Date(h.fechaIngreso).getTime()) / 86400000)
-              : Math.ceil((Date.now() - new Date(h.fechaIngreso).getTime()) / 86400000);
-            return (
-              <Card key={h.id} className={`hover:shadow-md transition-shadow group overflow-hidden ${activa ? "border-l-4 border-l-emerald-500 bg-emerald-50/30" : "border-l-4 border-l-transparent hover:border-l-primary"}`}>
-                <CardContent className="p-0 flex flex-col sm:flex-row items-stretch">
-                  <div className={`p-6 border-r flex flex-col justify-center min-w-[180px] shrink-0 ${activa ? "bg-emerald-100/50" : "bg-muted/20"}`}>
-                    <div className="flex items-center gap-2 font-bold text-lg text-foreground mb-1">
-                      <BedDouble className={`w-5 h-5 ${activa ? "text-emerald-600" : "text-muted-foreground"}`} />
-                      {format(new Date(h.fechaIngreso), "dd/MM/yyyy")}
-                    </div>
-                    {h.fechaAlta ? (
-                      <div className="text-sm font-medium text-muted-foreground">→ Alta: {format(new Date(h.fechaAlta), "dd/MM/yyyy")}</div>
-                    ) : (
-                      <div className="inline-block self-start mt-1">
-                        <Badge variant="default" className="bg-emerald-600 text-white font-bold animate-pulse px-2 py-0.5 text-xs tracking-wider uppercase">Activo</Badge>
-                      </div>
+    <div className="grid gap-4">
+      {hosps.map((hospitalizacion) => {
+        const activa = !hospitalizacion.fechaAlta;
+
+        const fechaIngreso = new Date(
+          `${hospitalizacion.fechaIngreso}T12:00:00`,
+        );
+
+        const fechaFinal = hospitalizacion.fechaAlta
+          ? new Date(
+              `${hospitalizacion.fechaAlta}T12:00:00`,
+            )
+          : new Date();
+
+        const dias = Math.max(
+          1,
+          Math.ceil(
+            (fechaFinal.getTime() -
+              fechaIngreso.getTime()) /
+              86400000,
+          ),
+        );
+
+        return (
+          <Card
+            key={hospitalizacion.id}
+            className={
+              activa
+                ? "hover:shadow-md transition-shadow group overflow-hidden border-l-4 border-l-emerald-500 bg-emerald-50/30"
+                : "hover:shadow-md transition-shadow group overflow-hidden border-l-4 border-l-transparent hover:border-l-primary"
+            }
+          >
+            <CardContent className="p-0 flex flex-col sm:flex-row items-stretch">
+              <div
+                className={`p-6 border-r flex flex-col justify-center min-w-[180px] shrink-0 ${
+                  activa
+                    ? "bg-emerald-100/50"
+                    : "bg-muted/20"
+                }`}
+              >
+                <div className="flex items-center gap-2 font-bold text-lg text-foreground mb-1">
+                  <BedDouble
+                    className={`w-5 h-5 ${
+                      activa
+                        ? "text-emerald-600"
+                        : "text-muted-foreground"
+                    }`}
+                  />
+
+                  {format(
+                    fechaIngreso,
+                    "dd/MM/yyyy",
+                  )}
+                </div>
+
+                {hospitalizacion.fechaAlta ? (
+                  <div className="text-sm font-medium text-muted-foreground">
+                    → Alta:{" "}
+                    {format(
+                      new Date(
+                        `${hospitalizacion.fechaAlta}T12:00:00`,
+                      ),
+                      "dd/MM/yyyy",
                     )}
                   </div>
-                  <div className="p-6 flex-1 flex flex-col justify-center space-y-3">
-                    <div className="flex flex-wrap items-center gap-3">
-                      <Badge className={`text-xs font-bold uppercase tracking-wider px-2 py-0.5 border ${estadoColor[h.estado] ?? "bg-slate-100 text-slate-700 border-slate-200"}`}>
-                        {h.estado === "Crítico" && <AlertTriangle className="h-3 w-3 mr-1" />}
-                        {h.estado}
-                      </Badge>
-                      <Badge variant="outline" className="text-xs font-semibold px-2 py-0.5 text-muted-foreground">
-                        {dias} Día{dias !== 1 ? "s" : ""}
-                      </Badge>
-                      {!activa && h.tipoAlta && (
-                        <Badge variant="outline" className="text-xs font-semibold px-2 py-0.5 border-emerald-200 text-emerald-700 bg-emerald-50">
-                          Alta {h.tipoAlta}
-                        </Badge>
-                      )}
-                    </div>
-                    <div>
-                      <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">Motivo de Ingreso</div>
-                      <p className="text-base font-bold text-foreground line-clamp-2">{h.motivo}</p>
-                    </div>
-                    {h.jaula && (
-                      <div className="text-sm font-medium text-muted-foreground bg-muted/40 px-3 py-1.5 rounded-md inline-flex items-center w-fit border border-border/50">
-                        {h.jaula}
-                      </div>
+                ) : (
+                  <div className="inline-block self-start mt-1">
+                    <Badge className="bg-emerald-600 text-white font-bold px-2 py-0.5 text-xs tracking-wider uppercase">
+                      Activo
+                    </Badge>
+                  </div>
+                )}
+              </div>
+
+              <div className="p-6 flex-1 flex flex-col justify-center space-y-3">
+                <div className="flex flex-wrap items-center gap-3">
+                  <Badge
+                    className={`text-xs font-bold uppercase tracking-wider px-2 py-0.5 border ${
+                      estadoColor[
+                        hospitalizacion.estado
+                      ] ??
+                      "bg-slate-100 text-slate-700 border-slate-200"
+                    }`}
+                  >
+                    {hospitalizacion.estado ===
+                      "Crítico" && (
+                      <AlertTriangle className="h-3 w-3 mr-1" />
                     )}
+
+                    {hospitalizacion.estado}
+                  </Badge>
+
+                  <Badge
+                    variant="outline"
+                    className="text-xs font-semibold px-2 py-0.5 text-muted-foreground"
+                  >
+                    {dias} Día
+                    {dias !== 1 ? "s" : ""}
+                  </Badge>
+
+                  {!activa &&
+                    hospitalizacion.tipoAlta && (
+                      <Badge
+                        variant="outline"
+                        className="text-xs font-semibold px-2 py-0.5 border-emerald-200 text-emerald-700 bg-emerald-50"
+                      >
+                        Alta{" "}
+                        {hospitalizacion.tipoAlta}
+                      </Badge>
+                    )}
+                </div>
+
+                <div>
+                  <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">
+                    Motivo de Ingreso
                   </div>
-                  <div className="p-6 flex items-center justify-end border-l bg-muted/5 sm:bg-transparent sm:border-l-0">
-                    <Link href={`/hospitalizaciones/${h.id}`}>
-                      <Button variant={activa ? "default" : "outline"} className={`font-medium ${activa ? "bg-emerald-600 hover:bg-emerald-700 text-white" : "group-hover:bg-primary group-hover:text-primary-foreground transition-colors"}`}>
-                        Gestionar
-                      </Button>
-                    </Link>
+
+                  <p className="text-base font-bold text-foreground line-clamp-2">
+                    {hospitalizacion.motivo}
+                  </p>
+                </div>
+
+                {hospitalizacion.jaula && (
+                  <div className="text-sm font-medium text-muted-foreground bg-muted/40 px-3 py-1.5 rounded-md inline-flex items-center w-fit border border-border/50">
+                    {hospitalizacion.jaula}
                   </div>
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
-      )}
-    </>
+                )}
+              </div>
+
+              <div className="p-6 flex items-center justify-end border-l bg-muted/5 sm:bg-transparent sm:border-l-0">
+                <Link
+                  href={`/hospitalizaciones/${hospitalizacion.id}`}
+                >
+                  <Button
+                    variant={
+                      activa ? "default" : "outline"
+                    }
+                    className={
+                      activa
+                        ? "font-medium bg-emerald-600 hover:bg-emerald-700 text-white"
+                        : "font-medium group-hover:bg-primary group-hover:text-primary-foreground transition-colors"
+                    }
+                  >
+                    Gestionar
+                  </Button>
+                </Link>
+              </div>
+            </CardContent>
+          </Card>
+        );
+      })}
+    </div>
   );
 }
