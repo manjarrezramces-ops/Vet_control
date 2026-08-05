@@ -2770,13 +2770,17 @@ export default function MedicinaPreventivaTab({
             </Campo>
 
             <div className="flex justify-end gap-3">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() =>
-                  setFormularioActivo(null)
-                }
-              >
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setFormularioActivo("desparasitacion");
+                    window.scrollTo({
+                      top: 0,
+                      behavior: "smooth",
+                    });
+                  }}
+                >
                 Cancelar
               </Button>
 
@@ -3338,6 +3342,18 @@ export default function MedicinaPreventivaTab({
                 Sin desparasitaciones
                 registradas
               </p>
+              <Button
+                type="button"
+                className="mt-4"
+                onClick={() =>
+                  setFormularioActivo(
+                    "desparasitacion",
+                  )
+                }
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Registrar desparasitación
+              </Button>
             </div>
           ) : (
             data.desparasitaciones.map(
