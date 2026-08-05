@@ -11,6 +11,7 @@ import movimientosRouter from "./movimientos";
 import hospitalizacionesRouter from "./hospitalizaciones";
 import hospitalizacionArchivosRouter from "./hospitalizacion_archivos";
 import procedimientosRouter from "./procedimientos";
+import medicinaPreventivaRouter from "./medicina_preventiva";
 
 const router: IRouter = Router();
 
@@ -25,6 +26,7 @@ router.use(movimientosRouter);
 router.use(hospitalizacionesRouter);
 router.use(hospitalizacionArchivosRouter);
 router.use(procedimientosRouter);
+router.use(medicinaPreventivaRouter);
 router.use(storageRouter);
 
 export default router;
