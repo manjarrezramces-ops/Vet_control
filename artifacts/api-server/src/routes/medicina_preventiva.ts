@@ -113,7 +113,31 @@ const crearDesparasitacionSchema = z
      * Puede calcularse desde frecuenciaDias o elegirse manualmente.
      */
     proximaAplicacion: z.string().optional(),
+    programarProxima: z.boolean().optional(),
 
+    tipoProgramacion: z
+      .enum([
+        "Duracion del producto",
+        "Dias",
+        "Semanas",
+        "Meses",
+        "Fecha exacta",
+      ])
+      .optional(),
+
+    proximoProductoTipo: z
+      .enum([
+        "Mismo producto",
+        "Otro producto",
+        "Por decidir",
+      ])
+      .optional(),
+
+    proximoProducto: z.string().optional(),
+
+    decisionMedica: z.string().optional(),
+
+    fechaFinCobertura: z.string().optional(),
     pesoAplicacion: z.string().optional(),
 
     observaciones: z.string().optional(),
@@ -773,7 +797,29 @@ router.post(
         frecuenciaDias: data.frecuenciaDias,
 
         proximaAplicacion,
+        programarProxima:
+          data.programarProxima ?? false,
 
+        tipoProgramacion:
+          data.tipoProgramacion || null,
+
+        proximoProductoTipo:
+          data.proximoProductoTipo || null,
+
+        proximoProducto:
+          data.proximoProducto || null,
+
+        decisionMedica:
+          data.decisionMedica || null,
+
+        fechaFinCobertura:
+          data.fechaFinCobertura ||
+          (data.duracionDias
+            ? addDays(
+                data.fechaAplicacion,
+                data.duracionDias,
+              )
+            : null),
         pesoAplicacion:
           data.pesoAplicacion || null,
 

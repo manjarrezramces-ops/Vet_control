@@ -1,5 +1,9 @@
 import { useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { format } from "date-fns";
 import {
   Bug,
@@ -82,6 +86,14 @@ type Desparasitacion = {
   duracionDias: number | null;
   frecuenciaDias: number | null;
   proximaAplicacion: string | null;
+
+  programarProxima: boolean;
+  tipoProgramacion: string | null;
+  proximoProductoTipo: string | null;
+  proximoProducto: string | null;
+  decisionMedica: string | null;
+  fechaFinCobertura: string | null;
+
   pesoAplicacion: string | null;
   observaciones: string | null;
 };
@@ -123,13 +135,28 @@ type VacunaFormulario = {
   fechaAplicacion: string;
   fechaVencimiento: string;
   proximaAplicacion: string;
-  estado: string;
+  estado:
+    | "Aplicada"
+    | "Programada/Pendiente"
+    | "Cancelada";
   decisionMedica: string;
   motivoDecision: string;
   reaccionAdversa: boolean;
   descripcionReaccion: string;
   observaciones: string;
 };
+
+type TipoProgramacion =
+  | "Duracion del producto"
+  | "Dias"
+  | "Semanas"
+  | "Meses"
+  | "Fecha exacta";
+
+type ProximoProductoTipo =
+  | "Mismo producto"
+  | "Otro producto"
+  | "Por decidir";
 
 /* =========================================================
    UTILIDADES
@@ -142,13 +169,33 @@ function fechaActual() {
   return format(new Date(), "yyyy-MM-dd");
 }
 
+function crearFechaLocal(fecha: string) {
+  return new Date(`${fecha.slice(0, 10)}T12:00:00`);
+}
+
+function fechaAString(fecha: Date) {
+  return format(fecha, "yyyy-MM-dd");
+}
+
+function sumarDias(fecha: string, dias: number) {
+  const resultado = crearFechaLocal(fecha);
+  resultado.setDate(resultado.getDate() + dias);
+  return fechaAString(resultado);
+}
+
+function sumarMeses(fecha: string, meses: number) {
+  const resultado = crearFechaLocal(fecha);
+  resultado.setMonth(resultado.getMonth() + meses);
+  return fechaAString(resultado);
+}
+
 function mostrarFecha(fecha?: string | null) {
   if (!fecha) {
     return "Sin programar";
   }
 
   return format(
-    new Date(`${fecha.slice(0, 10)}T12:00:00`),
+    crearFechaLocal(fecha),
     "dd/MM/yyyy",
   );
 }
@@ -181,18 +228,13 @@ function vacunaVacia(): VacunaFormulario {
 function estadoColor(estado: string) {
   switch (estado) {
     case "Aplicada":
-    case "Vigente":
       return "bg-emerald-100 text-emerald-800 border-emerald-200";
 
-    case "Vencida":
-    case "Contraindicada":
-      return "bg-red-100 text-red-800 border-red-200";
-
-    case "Pendiente":
-    case "Proxima":
-    case "Pospuesta":
-    case "Pendiente de decision medica":
+    case "Programada/Pendiente":
       return "bg-yellow-100 text-yellow-800 border-yellow-200";
+
+    case "Cancelada":
+      return "bg-red-100 text-red-800 border-red-200";
 
     default:
       return "bg-slate-100 text-slate-700 border-slate-200";
@@ -228,7 +270,10 @@ export default function MedicinaPreventivaTab({
   pacienteId: number;
   especie: string;
 }) {
-  const BASE = (import.meta.env.BASE_URL as string).replace(/\/$/, "");
+  const BASE = (
+    import.meta.env.BASE_URL as string
+  ).replace(/\/$/, "");
+
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -239,15 +284,22 @@ export default function MedicinaPreventivaTab({
         ? "Gato"
         : null;
 
-  const [formularioActivo, setFormularioActivo] = useState<
-    "vacunacion" | "desparasitacion" | "prueba" | null
-  >(null);
+  const [formularioActivo, setFormularioActivo] =
+    useState<
+      | "vacunacion"
+      | "desparasitacion"
+      | "prueba"
+      | null
+    >(null);
 
   /* ---------------------------------------------------------
      ESTADO DE VACUNACIÓN
   --------------------------------------------------------- */
 
-  const [visitaVacunacion, setVisitaVacunacion] = useState({
+  const [
+    visitaVacunacion,
+    setVisitaVacunacion,
+  ] = useState({
     fechaVisita: fechaActual(),
     intervaloDias: "15",
     origen: "Clinica",
@@ -258,15 +310,18 @@ export default function MedicinaPreventivaTab({
     observaciones: "",
   });
 
-  const [vacunas, setVacunas] = useState<VacunaFormulario[]>([
-    vacunaVacia(),
-  ]);
+  const [vacunas, setVacunas] = useState<
+    VacunaFormulario[]
+  >([vacunaVacia()]);
 
   /* ---------------------------------------------------------
      ESTADO DE DESPARASITACIÓN
   --------------------------------------------------------- */
 
-  const [desparasitacion, setDesparasitacion] = useState({
+  const [
+    desparasitacion,
+    setDesparasitacion,
+  ] = useState({
     fechaAplicacion: fechaActual(),
     producto: "",
     principioActivo: "",
@@ -275,11 +330,28 @@ export default function MedicinaPreventivaTab({
     origen: "Clinica",
     clinicaExterna: "",
     medicoResponsable: "",
+
     cubreInternos: true,
     cubreExternos: false,
+
     duracionDias: "",
-    frecuenciaDias: "",
+
+    programarProxima: false,
+
+    tipoProgramacion:
+      "Fecha exacta" as TipoProgramacion,
+
+    cantidadProgramacion: "",
+
     proximaAplicacion: "",
+
+    proximoProductoTipo:
+      "Por decidir" as ProximoProductoTipo,
+
+    proximoProducto: "",
+
+    decisionMedica: "",
+
     pesoAplicacion: "",
     observaciones: "",
     comprobantePresentado: false,
@@ -289,23 +361,161 @@ export default function MedicinaPreventivaTab({
      ESTADO DE PRUEBA FELINA
   --------------------------------------------------------- */
 
-  const [pruebaFelina, setPruebaFelina] = useState({
-    fechaPrueba: fechaActual(),
-    fechaResultado: fechaActual(),
-    origen: "Clinica",
-    laboratorio: "",
-    clinicaExterna: "",
-    medicoResponsable: "",
-    medicoExterno: "",
-    resultadoFiv: "Pendiente",
-    resultadoFelv: "Pendiente",
-    edadMeses: "",
-    decisionLeucemia: "Pendiente",
-    motivoDecision: "",
-    fechaReevaluacion: "",
-    observaciones: "",
-    comprobantePresentado: false,
-  });
+  const [pruebaFelina, setPruebaFelina] =
+    useState({
+      fechaPrueba: fechaActual(),
+      fechaResultado: fechaActual(),
+      origen: "Clinica",
+      laboratorio: "",
+      clinicaExterna: "",
+      medicoResponsable: "",
+      medicoExterno: "",
+      resultadoFiv: "Pendiente",
+      resultadoFelv: "Pendiente",
+      edadMeses: "",
+      decisionLeucemia: "Pendiente",
+      motivoDecision: "",
+      fechaReevaluacion: "",
+      observaciones: "",
+      comprobantePresentado: false,
+    });
+
+  /* =========================================================
+     CÁLCULOS DE DESPARASITACIÓN
+  ========================================================= */
+
+  const calcularFechaFinCobertura = () => {
+    const duracion = Number(
+      desparasitacion.duracionDias,
+    );
+
+    if (
+      !desparasitacion.fechaAplicacion ||
+      !Number.isFinite(duracion) ||
+      duracion <= 0
+    ) {
+      return "";
+    }
+
+    return sumarDias(
+      desparasitacion.fechaAplicacion,
+      duracion,
+    );
+  };
+
+  const calcularProgramacion = () => {
+    if (!desparasitacion.programarProxima) {
+      return {
+        fecha: "",
+        frecuenciaDias: undefined as
+          | number
+          | undefined,
+      };
+    }
+
+    const fechaBase =
+      desparasitacion.fechaAplicacion;
+
+    if (!fechaBase) {
+      return {
+        fecha: "",
+        frecuenciaDias: undefined,
+      };
+    }
+
+    if (
+      desparasitacion.tipoProgramacion ===
+      "Fecha exacta"
+    ) {
+      return {
+        fecha:
+          desparasitacion.proximaAplicacion,
+        frecuenciaDias: undefined,
+      };
+    }
+
+    if (
+      desparasitacion.tipoProgramacion ===
+      "Duracion del producto"
+    ) {
+      const duracion = Number(
+        desparasitacion.duracionDias,
+      );
+
+      if (
+        !Number.isFinite(duracion) ||
+        duracion <= 0
+      ) {
+        return {
+          fecha: "",
+          frecuenciaDias: undefined,
+        };
+      }
+
+      return {
+        fecha: sumarDias(fechaBase, duracion),
+        frecuenciaDias: duracion,
+      };
+    }
+
+    const cantidad = Number(
+      desparasitacion.cantidadProgramacion,
+    );
+
+    if (
+      !Number.isFinite(cantidad) ||
+      cantidad <= 0
+    ) {
+      return {
+        fecha: "",
+        frecuenciaDias: undefined,
+      };
+    }
+
+    if (
+      desparasitacion.tipoProgramacion ===
+      "Dias"
+    ) {
+      return {
+        fecha: sumarDias(fechaBase, cantidad),
+        frecuenciaDias: cantidad,
+      };
+    }
+
+    if (
+      desparasitacion.tipoProgramacion ===
+      "Semanas"
+    ) {
+      return {
+        fecha: sumarDias(
+          fechaBase,
+          cantidad * 7,
+        ),
+        frecuenciaDias: cantidad * 7,
+      };
+    }
+
+    if (
+      desparasitacion.tipoProgramacion ===
+      "Meses"
+    ) {
+      return {
+        fecha: sumarMeses(fechaBase, cantidad),
+        frecuenciaDias: cantidad * 30,
+      };
+    }
+
+    return {
+      fecha: "",
+      frecuenciaDias: undefined,
+    };
+  };
+
+  const fechaFinCobertura =
+    calcularFechaFinCobertura();
+
+  const programacionCalculada =
+    calcularProgramacion();
 
   /* =========================================================
      CONSULTA DEL HISTORIAL
@@ -316,7 +526,10 @@ export default function MedicinaPreventivaTab({
     isLoading,
     isError,
   } = useQuery<MedicinaPreventivaResponse>({
-    queryKey: ["medicina-preventiva", pacienteId],
+    queryKey: [
+      "medicina-preventiva",
+      pacienteId,
+    ],
 
     queryFn: async () => {
       const respuesta = await fetch(
@@ -337,7 +550,10 @@ export default function MedicinaPreventivaTab({
 
   const actualizarHistorial = async () => {
     await queryClient.invalidateQueries({
-      queryKey: ["medicina-preventiva", pacienteId],
+      queryKey: [
+        "medicina-preventiva",
+        pacienteId,
+      ],
     });
   };
 
@@ -353,8 +569,15 @@ export default function MedicinaPreventivaTab({
         );
       }
 
-      if (vacunas.some((vacuna) => !vacuna.vacuna.trim())) {
-        throw new Error("Debes indicar el nombre de cada vacuna.");
+      if (
+        vacunas.some(
+          (vacuna) =>
+            !vacuna.vacuna.trim(),
+        )
+      ) {
+        throw new Error(
+          "Debes indicar el nombre de cada vacuna.",
+        );
       }
 
       const respuesta = await fetch(
@@ -363,82 +586,118 @@ export default function MedicinaPreventivaTab({
           method: "POST",
 
           headers: {
-            "Content-Type": "application/json",
+            "Content-Type":
+              "application/json",
           },
 
           body: JSON.stringify({
-            fechaVisita: visitaVacunacion.fechaVisita,
+            fechaVisita:
+              visitaVacunacion.fechaVisita,
 
-            intervaloDias: visitaVacunacion.intervaloDias
-              ? Number(visitaVacunacion.intervaloDias)
-              : undefined,
+            intervaloDias:
+              visitaVacunacion.intervaloDias
+                ? Number(
+                    visitaVacunacion.intervaloDias,
+                  )
+                : undefined,
 
-            origen: visitaVacunacion.origen,
+            origen:
+              visitaVacunacion.origen,
 
-            medicoResponsable: textoOpcional(
-              visitaVacunacion.medicoResponsable,
-            ),
+            medicoResponsable:
+              textoOpcional(
+                visitaVacunacion.medicoResponsable,
+              ),
 
-            clinicaExterna: textoOpcional(
-              visitaVacunacion.clinicaExterna,
-            ),
+            clinicaExterna:
+              textoOpcional(
+                visitaVacunacion.clinicaExterna,
+              ),
 
-            medicoExterno: textoOpcional(
-              visitaVacunacion.medicoExterno,
-            ),
+            medicoExterno:
+              textoOpcional(
+                visitaVacunacion.medicoExterno,
+              ),
 
             comprobantePresentado:
               visitaVacunacion.comprobantePresentado,
 
-            observaciones: textoOpcional(
-              visitaVacunacion.observaciones,
+            observaciones:
+              textoOpcional(
+                visitaVacunacion.observaciones,
+              ),
+
+            vacunas: vacunas.map(
+              (vacuna) => ({
+                vacuna:
+                  vacuna.vacuna.trim(),
+
+                especie:
+                  especieNormalizada,
+
+                etapa: vacuna.etapa,
+
+                marca: textoOpcional(
+                  vacuna.marca,
+                ),
+
+                laboratorio:
+                  textoOpcional(
+                    vacuna.laboratorio,
+                  ),
+
+                lote: textoOpcional(
+                  vacuna.lote,
+                ),
+
+                fechaCaducidad:
+                  vacuna.fechaCaducidad ||
+                  undefined,
+
+                fechaAplicacion:
+                  vacuna.fechaAplicacion,
+
+                fechaVencimiento:
+                  vacuna.fechaVencimiento ||
+                  undefined,
+
+                proximaAplicacion:
+                  vacuna.proximaAplicacion ||
+                  undefined,
+
+                estado: vacuna.estado,
+
+                decisionMedica:
+                  textoOpcional(
+                    vacuna.decisionMedica,
+                  ),
+
+                motivoDecision:
+                  textoOpcional(
+                    vacuna.motivoDecision,
+                  ),
+
+                reaccionAdversa:
+                  vacuna.reaccionAdversa,
+
+                descripcionReaccion:
+                  textoOpcional(
+                    vacuna.descripcionReaccion,
+                  ),
+
+                observaciones:
+                  textoOpcional(
+                    vacuna.observaciones,
+                  ),
+              }),
             ),
-
-            vacunas: vacunas.map((vacuna) => ({
-              vacuna: vacuna.vacuna.trim(),
-              especie: especieNormalizada,
-              etapa: vacuna.etapa,
-
-              marca: textoOpcional(vacuna.marca),
-              laboratorio: textoOpcional(vacuna.laboratorio),
-              lote: textoOpcional(vacuna.lote),
-
-              fechaCaducidad:
-                vacuna.fechaCaducidad || undefined,
-
-              fechaAplicacion: vacuna.fechaAplicacion,
-
-              fechaVencimiento:
-                vacuna.fechaVencimiento || undefined,
-
-              proximaAplicacion:
-                vacuna.proximaAplicacion || undefined,
-
-              estado: vacuna.estado,
-
-              decisionMedica: textoOpcional(
-                vacuna.decisionMedica,
-              ),
-
-              motivoDecision: textoOpcional(
-                vacuna.motivoDecision,
-              ),
-
-              reaccionAdversa: vacuna.reaccionAdversa,
-
-              descripcionReaccion: textoOpcional(
-                vacuna.descripcionReaccion,
-              ),
-
-              observaciones: textoOpcional(
-                vacuna.observaciones,
-              ),
-            })),
           }),
         },
       );
 
-      const contenido = await respuesta.json().catch(() => null);
+      const contenido = await respuesta
+        .json()
+        .catch(() => null);
 
       if (!respuesta.ok) {
         throw new Error(
@@ -490,236 +749,358 @@ export default function MedicinaPreventivaTab({
      REGISTRAR DESPARASITACIÓN
   ========================================================= */
 
-  const registrarDesparasitacion = useMutation({
-    mutationFn: async () => {
-      if (!desparasitacion.producto.trim()) {
-        throw new Error(
-          "Debes indicar el producto desparasitante.",
-        );
-      }
+  const registrarDesparasitacion =
+    useMutation({
+      mutationFn: async () => {
+        if (
+          !desparasitacion.producto.trim()
+        ) {
+          throw new Error(
+            "Debes indicar el producto desparasitante.",
+          );
+        }
 
-      if (
-        !desparasitacion.cubreInternos &&
-        !desparasitacion.cubreExternos
-      ) {
-        throw new Error(
-          "Debes indicar si cubre parásitos internos, externos o ambos.",
-        );
-      }
+        if (
+          !desparasitacion.cubreInternos &&
+          !desparasitacion.cubreExternos
+        ) {
+          throw new Error(
+            "Debes indicar si cubre parásitos internos, externos o ambos.",
+          );
+        }
 
-      const respuesta = await fetch(
-        `${BASE}/api/pacientes/${pacienteId}/desparasitaciones`,
-        {
-          method: "POST",
+        if (
+          desparasitacion.programarProxima &&
+          !programacionCalculada.fecha
+        ) {
+          throw new Error(
+            "Debes completar correctamente la programación de la próxima desparasitación.",
+          );
+        }
 
-          headers: {
-            "Content-Type": "application/json",
+        if (
+          desparasitacion.programarProxima &&
+          desparasitacion
+            .proximoProductoTipo ===
+            "Otro producto" &&
+          !desparasitacion.proximoProducto.trim()
+        ) {
+          throw new Error(
+            "Debes escribir el producto planeado para la próxima desparasitación.",
+          );
+        }
+
+        const respuesta = await fetch(
+          `${BASE}/api/pacientes/${pacienteId}/desparasitaciones`,
+          {
+            method: "POST",
+
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+
+            body: JSON.stringify({
+              fechaAplicacion:
+                desparasitacion.fechaAplicacion,
+
+              producto:
+                desparasitacion.producto.trim(),
+
+              principioActivo:
+                textoOpcional(
+                  desparasitacion.principioActivo,
+                ),
+
+              lote: textoOpcional(
+                desparasitacion.lote,
+              ),
+
+              fabricante:
+                textoOpcional(
+                  desparasitacion.fabricante,
+                ),
+
+              origen:
+                desparasitacion.origen,
+
+              clinicaExterna:
+                textoOpcional(
+                  desparasitacion.clinicaExterna,
+                ),
+
+              medicoResponsable:
+                textoOpcional(
+                  desparasitacion.medicoResponsable,
+                ),
+
+              cubreInternos:
+                desparasitacion.cubreInternos,
+
+              cubreExternos:
+                desparasitacion.cubreExternos,
+
+              duracionDias:
+                desparasitacion.duracionDias
+                  ? Number(
+                      desparasitacion.duracionDias,
+                    )
+                  : undefined,
+
+              frecuenciaDias:
+                programacionCalculada.frecuenciaDias,
+
+              proximaAplicacion:
+                desparasitacion.programarProxima
+                  ? programacionCalculada.fecha
+                  : undefined,
+
+              programarProxima:
+                desparasitacion.programarProxima,
+
+              tipoProgramacion:
+                desparasitacion.programarProxima
+                  ? desparasitacion.tipoProgramacion
+                  : undefined,
+
+              proximoProductoTipo:
+                desparasitacion.programarProxima
+                  ? desparasitacion.proximoProductoTipo
+                  : undefined,
+
+              proximoProducto:
+                desparasitacion.programarProxima &&
+                desparasitacion
+                  .proximoProductoTipo ===
+                  "Otro producto"
+                  ? textoOpcional(
+                      desparasitacion.proximoProducto,
+                    )
+                  : undefined,
+
+              decisionMedica:
+                desparasitacion.programarProxima
+                  ? textoOpcional(
+                      desparasitacion.decisionMedica,
+                    )
+                  : undefined,
+
+              fechaFinCobertura:
+                fechaFinCobertura ||
+                undefined,
+
+              pesoAplicacion:
+                textoOpcional(
+                  desparasitacion.pesoAplicacion,
+                ),
+
+              observaciones:
+                textoOpcional(
+                  desparasitacion.observaciones,
+                ),
+
+              comprobantePresentado:
+                desparasitacion.comprobantePresentado,
+            }),
           },
-
-          body: JSON.stringify({
-            fechaAplicacion: desparasitacion.fechaAplicacion,
-            producto: desparasitacion.producto.trim(),
-
-            principioActivo: textoOpcional(
-              desparasitacion.principioActivo,
-            ),
-
-            lote: textoOpcional(desparasitacion.lote),
-
-            fabricante: textoOpcional(
-              desparasitacion.fabricante,
-            ),
-
-            origen: desparasitacion.origen,
-
-            clinicaExterna: textoOpcional(
-              desparasitacion.clinicaExterna,
-            ),
-
-            medicoResponsable: textoOpcional(
-              desparasitacion.medicoResponsable,
-            ),
-
-            cubreInternos: desparasitacion.cubreInternos,
-            cubreExternos: desparasitacion.cubreExternos,
-
-            duracionDias: desparasitacion.duracionDias
-              ? Number(desparasitacion.duracionDias)
-              : undefined,
-
-            frecuenciaDias: desparasitacion.frecuenciaDias
-              ? Number(desparasitacion.frecuenciaDias)
-              : undefined,
-
-            proximaAplicacion:
-              desparasitacion.proximaAplicacion || undefined,
-
-            pesoAplicacion: textoOpcional(
-              desparasitacion.pesoAplicacion,
-            ),
-
-            observaciones: textoOpcional(
-              desparasitacion.observaciones,
-            ),
-
-            comprobantePresentado:
-              desparasitacion.comprobantePresentado,
-          }),
-        },
-      );
-
-      const contenido = await respuesta.json().catch(() => null);
-
-      if (!respuesta.ok) {
-        throw new Error(
-          contenido?.error ||
-            "No se pudo registrar la desparasitación.",
         );
-      }
 
-      return contenido;
-    },
+        const contenido = await respuesta
+          .json()
+          .catch(() => null);
 
-    onSuccess: async () => {
-      await actualizarHistorial();
+        if (!respuesta.ok) {
+          throw new Error(
+            contenido?.error ||
+              "No se pudo registrar la desparasitación.",
+          );
+        }
 
-      setDesparasitacion({
-        fechaAplicacion: fechaActual(),
-        producto: "",
-        principioActivo: "",
-        lote: "",
-        fabricante: "",
-        origen: "Clinica",
-        clinicaExterna: "",
-        medicoResponsable: "",
-        cubreInternos: true,
-        cubreExternos: false,
-        duracionDias: "",
-        frecuenciaDias: "",
-        proximaAplicacion: "",
-        pesoAplicacion: "",
-        observaciones: "",
-        comprobantePresentado: false,
-      });
+        return contenido;
+      },
 
-      setFormularioActivo(null);
+      onSuccess: async () => {
+        await actualizarHistorial();
 
-      toast({
-        title: "Desparasitación registrada",
-      });
-    },
+        setDesparasitacion({
+          fechaAplicacion: fechaActual(),
+          producto: "",
+          principioActivo: "",
+          lote: "",
+          fabricante: "",
+          origen: "Clinica",
+          clinicaExterna: "",
+          medicoResponsable: "",
 
-    onError: (error) => {
-      toast({
-        variant: "destructive",
-        title: "No se pudo registrar",
-        description:
-          error instanceof Error
-            ? error.message
-            : "Ocurrió un error inesperado.",
-      });
-    },
-  });
+          cubreInternos: true,
+          cubreExternos: false,
+
+          duracionDias: "",
+
+          programarProxima: false,
+
+          tipoProgramacion:
+            "Fecha exacta",
+
+          cantidadProgramacion: "",
+
+          proximaAplicacion: "",
+
+          proximoProductoTipo:
+            "Por decidir",
+
+          proximoProducto: "",
+
+          decisionMedica: "",
+
+          pesoAplicacion: "",
+          observaciones: "",
+          comprobantePresentado: false,
+        });
+
+        setFormularioActivo(null);
+
+        toast({
+          title:
+            "Desparasitación registrada",
+          description:
+            "El registro y la decisión médica fueron guardados.",
+        });
+      },
+
+      onError: (error) => {
+        toast({
+          variant: "destructive",
+          title: "No se pudo registrar",
+          description:
+            error instanceof Error
+              ? error.message
+              : "Ocurrió un error inesperado.",
+        });
+      },
+    });
 
   /* =========================================================
      REGISTRAR PRUEBA FELINA
   ========================================================= */
 
-  const registrarPruebaFelina = useMutation({
-    mutationFn: async () => {
-      const respuesta = await fetch(
-        `${BASE}/api/pacientes/${pacienteId}/pruebas-felinas`,
-        {
-          method: "POST",
+  const registrarPruebaFelina =
+    useMutation({
+      mutationFn: async () => {
+        const respuesta = await fetch(
+          `${BASE}/api/pacientes/${pacienteId}/pruebas-felinas`,
+          {
+            method: "POST",
 
-          headers: {
-            "Content-Type": "application/json",
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+
+            body: JSON.stringify({
+              fechaPrueba:
+                pruebaFelina.fechaPrueba,
+
+              fechaResultado:
+                pruebaFelina.fechaResultado ||
+                undefined,
+
+              origen:
+                pruebaFelina.origen,
+
+              tipoPrueba: "FIV/FeLV",
+
+              laboratorio:
+                textoOpcional(
+                  pruebaFelina.laboratorio,
+                ),
+
+              clinicaExterna:
+                textoOpcional(
+                  pruebaFelina.clinicaExterna,
+                ),
+
+              medicoResponsable:
+                textoOpcional(
+                  pruebaFelina.medicoResponsable,
+                ),
+
+              medicoExterno:
+                textoOpcional(
+                  pruebaFelina.medicoExterno,
+                ),
+
+              resultadoFiv:
+                pruebaFelina.resultadoFiv,
+
+              resultadoFelv:
+                pruebaFelina.resultadoFelv,
+
+              edadMeses:
+                pruebaFelina.edadMeses
+                  ? Number(
+                      pruebaFelina.edadMeses,
+                    )
+                  : undefined,
+
+              decisionLeucemia:
+                pruebaFelina.decisionLeucemia,
+
+              motivoDecision:
+                textoOpcional(
+                  pruebaFelina.motivoDecision,
+                ),
+
+              fechaReevaluacion:
+                pruebaFelina.fechaReevaluacion ||
+                undefined,
+
+              observaciones:
+                textoOpcional(
+                  pruebaFelina.observaciones,
+                ),
+
+              comprobantePresentado:
+                pruebaFelina.comprobantePresentado,
+            }),
           },
-
-          body: JSON.stringify({
-            fechaPrueba: pruebaFelina.fechaPrueba,
-
-            fechaResultado:
-              pruebaFelina.fechaResultado || undefined,
-
-            origen: pruebaFelina.origen,
-            tipoPrueba: "FIV/FeLV",
-
-            laboratorio: textoOpcional(
-              pruebaFelina.laboratorio,
-            ),
-
-            clinicaExterna: textoOpcional(
-              pruebaFelina.clinicaExterna,
-            ),
-
-            medicoResponsable: textoOpcional(
-              pruebaFelina.medicoResponsable,
-            ),
-
-            medicoExterno: textoOpcional(
-              pruebaFelina.medicoExterno,
-            ),
-
-            resultadoFiv: pruebaFelina.resultadoFiv,
-            resultadoFelv: pruebaFelina.resultadoFelv,
-
-            edadMeses: pruebaFelina.edadMeses
-              ? Number(pruebaFelina.edadMeses)
-              : undefined,
-
-            decisionLeucemia:
-              pruebaFelina.decisionLeucemia,
-
-            motivoDecision: textoOpcional(
-              pruebaFelina.motivoDecision,
-            ),
-
-            fechaReevaluacion:
-              pruebaFelina.fechaReevaluacion || undefined,
-
-            observaciones: textoOpcional(
-              pruebaFelina.observaciones,
-            ),
-
-            comprobantePresentado:
-              pruebaFelina.comprobantePresentado,
-          }),
-        },
-      );
-
-      const contenido = await respuesta.json().catch(() => null);
-
-      if (!respuesta.ok) {
-        throw new Error(
-          contenido?.error ||
-            "No se pudo registrar la prueba felina.",
         );
-      }
 
-      return contenido;
-    },
+        const contenido = await respuesta
+          .json()
+          .catch(() => null);
 
-    onSuccess: async () => {
-      await actualizarHistorial();
-      setFormularioActivo(null);
+        if (!respuesta.ok) {
+          throw new Error(
+            contenido?.error ||
+              "No se pudo registrar la prueba felina.",
+          );
+        }
 
-      toast({
-        title: "Prueba FIV/FeLV registrada",
-      });
-    },
+        return contenido;
+      },
 
-    onError: (error) => {
-      toast({
-        variant: "destructive",
-        title: "No se pudo registrar",
-        description:
-          error instanceof Error
-            ? error.message
-            : "Ocurrió un error inesperado.",
-      });
-    },
-  });
+      onSuccess: async () => {
+        await actualizarHistorial();
+        setFormularioActivo(null);
+
+        toast({
+          title:
+            "Prueba FIV/FeLV registrada",
+        });
+      },
+
+      onError: (error) => {
+        toast({
+          variant: "destructive",
+          title: "No se pudo registrar",
+          description:
+            error instanceof Error
+              ? error.message
+              : "Ocurrió un error inesperado.",
+        });
+      },
+    });
 
   /* =========================================================
      ELIMINAR REGISTROS
@@ -738,12 +1119,20 @@ export default function MedicinaPreventivaTab({
     }
 
     try {
-      const respuesta = await fetch(`${BASE}/api/${ruta}`, {
-        method: "DELETE",
-      });
+      const respuesta = await fetch(
+        `${BASE}/api/${ruta}`,
+        {
+          method: "DELETE",
+        },
+      );
 
-      if (!respuesta.ok && respuesta.status !== 204) {
-        throw new Error("No se pudo eliminar el registro.");
+      if (
+        !respuesta.ok &&
+        respuesta.status !== 204
+      ) {
+        throw new Error(
+          "No se pudo eliminar el registro.",
+        );
       }
 
       await actualizarHistorial();
@@ -778,7 +1167,8 @@ export default function MedicinaPreventivaTab({
   if (isError || !data) {
     return (
       <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-8 text-destructive">
-        No se pudo cargar el historial de medicina preventiva.
+        No se pudo cargar el historial de
+        medicina preventiva.
       </div>
     );
   }
@@ -796,7 +1186,8 @@ export default function MedicinaPreventivaTab({
           </h3>
 
           <p className="text-sm text-muted-foreground mt-1">
-            Historial de vacunas, desparasitaciones y pruebas
+            Historial de vacunas,
+            desparasitaciones y pruebas
             preventivas.
           </p>
         </div>
@@ -806,7 +1197,8 @@ export default function MedicinaPreventivaTab({
             type="button"
             onClick={() =>
               setFormularioActivo(
-                formularioActivo === "vacunacion"
+                formularioActivo ===
+                  "vacunacion"
                   ? null
                   : "vacunacion",
               )
@@ -821,7 +1213,8 @@ export default function MedicinaPreventivaTab({
             variant="outline"
             onClick={() =>
               setFormularioActivo(
-                formularioActivo === "desparasitacion"
+                formularioActivo ===
+                  "desparasitacion"
                   ? null
                   : "desparasitacion",
               )
@@ -837,7 +1230,8 @@ export default function MedicinaPreventivaTab({
               variant="outline"
               onClick={() =>
                 setFormularioActivo(
-                  formularioActivo === "prueba"
+                  formularioActivo ===
+                    "prueba"
                     ? null
                     : "prueba",
                 )
@@ -854,7 +1248,8 @@ export default function MedicinaPreventivaTab({
           FORMULARIO DE VACUNACIÓN
       ====================================================== */}
 
-      {formularioActivo === "vacunacion" && (
+      {formularioActivo ===
+        "vacunacion" && (
         <Card className="border-primary/30">
           <CardHeader>
             <div className="flex items-center justify-between">
@@ -867,7 +1262,9 @@ export default function MedicinaPreventivaTab({
                 type="button"
                 variant="ghost"
                 size="icon"
-                onClick={() => setFormularioActivo(null)}
+                onClick={() =>
+                  setFormularioActivo(null)
+                }
               >
                 <X className="h-5 w-5" />
               </Button>
@@ -880,12 +1277,17 @@ export default function MedicinaPreventivaTab({
                 <input
                   type="date"
                   className={campoClass}
-                  value={visitaVacunacion.fechaVisita}
+                  value={
+                    visitaVacunacion.fechaVisita
+                  }
                   onChange={(event) =>
-                    setVisitaVacunacion((actual) => ({
-                      ...actual,
-                      fechaVisita: event.target.value,
-                    }))
+                    setVisitaVacunacion(
+                      (actual) => ({
+                        ...actual,
+                        fechaVisita:
+                          event.target.value,
+                      }),
+                    )
                   }
                 />
               </Campo>
@@ -893,60 +1295,95 @@ export default function MedicinaPreventivaTab({
               <Campo label="Intervalo del esquema">
                 <select
                   className={campoClass}
-                  value={visitaVacunacion.intervaloDias}
+                  value={
+                    visitaVacunacion.intervaloDias
+                  }
                   onChange={(event) =>
-                    setVisitaVacunacion((actual) => ({
-                      ...actual,
-                      intervaloDias: event.target.value,
-                    }))
+                    setVisitaVacunacion(
+                      (actual) => ({
+                        ...actual,
+                        intervaloDias:
+                          event.target.value,
+                      }),
+                    )
                   }
                 >
-                  <option value="15">15 días</option>
-                  <option value="21">21 días</option>
-                  <option value="">Sin intervalo inmediato</option>
+                  <option value="15">
+                    15 días
+                  </option>
+
+                  <option value="21">
+                    21 días
+                  </option>
+
+                  <option value="">
+                    Sin intervalo inmediato
+                  </option>
                 </select>
               </Campo>
 
               <Campo label="Origen">
                 <select
                   className={campoClass}
-                  value={visitaVacunacion.origen}
+                  value={
+                    visitaVacunacion.origen
+                  }
                   onChange={(event) =>
-                    setVisitaVacunacion((actual) => ({
-                      ...actual,
-                      origen: event.target.value,
-                    }))
+                    setVisitaVacunacion(
+                      (actual) => ({
+                        ...actual,
+                        origen:
+                          event.target.value,
+                      }),
+                    )
                   }
                 >
-                  <option value="Clinica">Nuestra clínica</option>
-                  <option value="Externa">Aplicación externa</option>
+                  <option value="Clinica">
+                    Nuestra clínica
+                  </option>
+
+                  <option value="Externa">
+                    Aplicación externa
+                  </option>
                 </select>
               </Campo>
 
               <Campo label="Médico responsable">
                 <input
                   className={campoClass}
-                  value={visitaVacunacion.medicoResponsable}
+                  value={
+                    visitaVacunacion.medicoResponsable
+                  }
                   onChange={(event) =>
-                    setVisitaVacunacion((actual) => ({
-                      ...actual,
-                      medicoResponsable: event.target.value,
-                    }))
+                    setVisitaVacunacion(
+                      (actual) => ({
+                        ...actual,
+                        medicoResponsable:
+                          event.target.value,
+                      }),
+                    )
                   }
                 />
               </Campo>
 
-              {visitaVacunacion.origen === "Externa" && (
+              {visitaVacunacion.origen ===
+                "Externa" && (
                 <>
                   <Campo label="Clínica externa">
                     <input
                       className={campoClass}
-                      value={visitaVacunacion.clinicaExterna}
+                      value={
+                        visitaVacunacion.clinicaExterna
+                      }
                       onChange={(event) =>
-                        setVisitaVacunacion((actual) => ({
-                          ...actual,
-                          clinicaExterna: event.target.value,
-                        }))
+                        setVisitaVacunacion(
+                          (actual) => ({
+                            ...actual,
+                            clinicaExterna:
+                              event.target
+                                .value,
+                          }),
+                        )
                       }
                     />
                   </Campo>
@@ -954,12 +1391,18 @@ export default function MedicinaPreventivaTab({
                   <Campo label="Médico externo">
                     <input
                       className={campoClass}
-                      value={visitaVacunacion.medicoExterno}
+                      value={
+                        visitaVacunacion.medicoExterno
+                      }
                       onChange={(event) =>
-                        setVisitaVacunacion((actual) => ({
-                          ...actual,
-                          medicoExterno: event.target.value,
-                        }))
+                        setVisitaVacunacion(
+                          (actual) => ({
+                            ...actual,
+                            medicoExterno:
+                              event.target
+                                .value,
+                          }),
+                        )
                       }
                     />
                   </Campo>
@@ -967,250 +1410,349 @@ export default function MedicinaPreventivaTab({
               )}
             </div>
 
-            {vacunas.map((vacuna, indice) => (
-              <div
-                key={indice}
-                className="rounded-xl border bg-muted/10 p-5 space-y-4"
-              >
-                <div className="flex items-center justify-between">
-                  <h4 className="font-bold">
-                    Vacuna {indice + 1}
-                  </h4>
+            {vacunas.map(
+              (vacuna, indice) => (
+                <div
+                  key={indice}
+                  className="rounded-xl border bg-muted/10 p-5 space-y-4"
+                >
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-bold">
+                      Vacuna {indice + 1}
+                    </h4>
 
-                  {vacunas.length > 1 && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="text-destructive"
-                      onClick={() =>
-                        setVacunas((actuales) =>
-                          actuales.filter(
-                            (_, posicion) => posicion !== indice,
-                          ),
-                        )
-                      }
-                    >
-                      Quitar
-                    </Button>
-                  )}
+                    {vacunas.length > 1 && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="text-destructive"
+                        onClick={() =>
+                          setVacunas(
+                            (actuales) =>
+                              actuales.filter(
+                                (
+                                  _,
+                                  posicion,
+                                ) =>
+                                  posicion !==
+                                  indice,
+                              ),
+                          )
+                        }
+                      >
+                        Quitar
+                      </Button>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <Campo label="Vacuna">
+                      <input
+                        className={campoClass}
+                        placeholder={
+                          especieNormalizada ===
+                          "Gato"
+                            ? "Triple felina, leucemia, rabia..."
+                            : "Cuádruple, séxtuple, óctuple..."
+                        }
+                        value={vacuna.vacuna}
+                        onChange={(event) =>
+                          setVacunas(
+                            (actuales) =>
+                              actuales.map(
+                                (
+                                  elemento,
+                                  posicion,
+                                ) =>
+                                  posicion ===
+                                  indice
+                                    ? {
+                                        ...elemento,
+                                        vacuna:
+                                          event
+                                            .target
+                                            .value,
+                                      }
+                                    : elemento,
+                              ),
+                          )
+                        }
+                      />
+                    </Campo>
+
+                    <Campo label="Etapa">
+                      <select
+                        className={campoClass}
+                        value={vacuna.etapa}
+                        onChange={(event) =>
+                          setVacunas(
+                            (actuales) =>
+                              actuales.map(
+                                (
+                                  elemento,
+                                  posicion,
+                                ) =>
+                                  posicion ===
+                                  indice
+                                    ? {
+                                        ...elemento,
+                                        etapa:
+                                          event
+                                            .target
+                                            .value as
+                                            | "Cachorro"
+                                            | "Adulto",
+                                      }
+                                    : elemento,
+                              ),
+                          )
+                        }
+                      >
+                        <option value="Cachorro">
+                          Cachorro
+                        </option>
+
+                        <option value="Adulto">
+                          Adulto
+                        </option>
+                      </select>
+                    </Campo>
+
+                    <Campo label="Fecha de aplicación">
+                      <input
+                        type="date"
+                        className={campoClass}
+                        value={
+                          vacuna.fechaAplicacion
+                        }
+                        onChange={(event) =>
+                          setVacunas(
+                            (actuales) =>
+                              actuales.map(
+                                (
+                                  elemento,
+                                  posicion,
+                                ) =>
+                                  posicion ===
+                                  indice
+                                    ? {
+                                        ...elemento,
+                                        fechaAplicacion:
+                                          event
+                                            .target
+                                            .value,
+                                      }
+                                    : elemento,
+                              ),
+                          )
+                        }
+                      />
+                    </Campo>
+
+                    <Campo label="Marca">
+                      <input
+                        className={campoClass}
+                        value={vacuna.marca}
+                        onChange={(event) =>
+                          setVacunas(
+                            (actuales) =>
+                              actuales.map(
+                                (
+                                  elemento,
+                                  posicion,
+                                ) =>
+                                  posicion ===
+                                  indice
+                                    ? {
+                                        ...elemento,
+                                        marca:
+                                          event
+                                            .target
+                                            .value,
+                                      }
+                                    : elemento,
+                              ),
+                          )
+                        }
+                      />
+                    </Campo>
+
+                    <Campo label="Laboratorio">
+                      <input
+                        className={campoClass}
+                        value={
+                          vacuna.laboratorio
+                        }
+                        onChange={(event) =>
+                          setVacunas(
+                            (actuales) =>
+                              actuales.map(
+                                (
+                                  elemento,
+                                  posicion,
+                                ) =>
+                                  posicion ===
+                                  indice
+                                    ? {
+                                        ...elemento,
+                                        laboratorio:
+                                          event
+                                            .target
+                                            .value,
+                                      }
+                                    : elemento,
+                              ),
+                          )
+                        }
+                      />
+                    </Campo>
+
+                    <Campo label="Lote">
+                      <input
+                        className={campoClass}
+                        value={vacuna.lote}
+                        onChange={(event) =>
+                          setVacunas(
+                            (actuales) =>
+                              actuales.map(
+                                (
+                                  elemento,
+                                  posicion,
+                                ) =>
+                                  posicion ===
+                                  indice
+                                    ? {
+                                        ...elemento,
+                                        lote:
+                                          event
+                                            .target
+                                            .value,
+                                      }
+                                    : elemento,
+                              ),
+                          )
+                        }
+                      />
+                    </Campo>
+
+                    <Campo label="Caducidad">
+                      <input
+                        type="date"
+                        className={campoClass}
+                        value={
+                          vacuna.fechaCaducidad
+                        }
+                        onChange={(event) =>
+                          setVacunas(
+                            (actuales) =>
+                              actuales.map(
+                                (
+                                  elemento,
+                                  posicion,
+                                ) =>
+                                  posicion ===
+                                  indice
+                                    ? {
+                                        ...elemento,
+                                        fechaCaducidad:
+                                          event
+                                            .target
+                                            .value,
+                                      }
+                                    : elemento,
+                              ),
+                          )
+                        }
+                      />
+                    </Campo>
+
+                    <Campo label="Próxima aplicación">
+                      <input
+                        type="date"
+                        className={campoClass}
+                        value={
+                          vacuna.proximaAplicacion
+                        }
+                        onChange={(event) =>
+                          setVacunas(
+                            (actuales) =>
+                              actuales.map(
+                                (
+                                  elemento,
+                                  posicion,
+                                ) =>
+                                  posicion ===
+                                  indice
+                                    ? {
+                                        ...elemento,
+                                        proximaAplicacion:
+                                          event
+                                            .target
+                                            .value,
+                                      }
+                                    : elemento,
+                              ),
+                          )
+                        }
+                      />
+                    </Campo>
+
+                    <Campo label="Estado">
+                      <select
+                        className={campoClass}
+                        value={vacuna.estado}
+                        onChange={(event) =>
+                          setVacunas(
+                            (actuales) =>
+                              actuales.map(
+                                (
+                                  elemento,
+                                  posicion,
+                                ) =>
+                                  posicion ===
+                                  indice
+                                    ? {
+                                        ...elemento,
+                                        estado:
+                                          event
+                                            .target
+                                            .value as VacunaFormulario["estado"],
+                                      }
+                                    : elemento,
+                              ),
+                          )
+                        }
+                      >
+                        <option value="Aplicada">
+                          Aplicada
+                        </option>
+
+                        <option value="Programada/Pendiente">
+                          Programada/Pendiente
+                        </option>
+
+                        <option value="Cancelada">
+                          Cancelada
+                        </option>
+                      </select>
+                    </Campo>
+                  </div>
                 </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <Campo label="Vacuna">
-                    <input
-                      className={campoClass}
-                      placeholder={
-                        especieNormalizada === "Gato"
-                          ? "Triple felina, leucemia, rabia..."
-                          : "Cuádruple, séxtuple, óctuple..."
-                      }
-                      value={vacuna.vacuna}
-                      onChange={(event) =>
-                        setVacunas((actuales) =>
-                          actuales.map((elemento, posicion) =>
-                            posicion === indice
-                              ? {
-                                  ...elemento,
-                                  vacuna: event.target.value,
-                                }
-                              : elemento,
-                          ),
-                        )
-                      }
-                    />
-                  </Campo>
-
-                  <Campo label="Etapa">
-                    <select
-                      className={campoClass}
-                      value={vacuna.etapa}
-                      onChange={(event) =>
-                        setVacunas((actuales) =>
-                          actuales.map((elemento, posicion) =>
-                            posicion === indice
-                              ? {
-                                  ...elemento,
-                                  etapa: event.target.value as
-                                    | "Cachorro"
-                                    | "Adulto",
-                                }
-                              : elemento,
-                          ),
-                        )
-                      }
-                    >
-                      <option value="Cachorro">Cachorro</option>
-                      <option value="Adulto">Adulto</option>
-                    </select>
-                  </Campo>
-
-                  <Campo label="Fecha de aplicación">
-                    <input
-                      type="date"
-                      className={campoClass}
-                      value={vacuna.fechaAplicacion}
-                      onChange={(event) =>
-                        setVacunas((actuales) =>
-                          actuales.map((elemento, posicion) =>
-                            posicion === indice
-                              ? {
-                                  ...elemento,
-                                  fechaAplicacion:
-                                    event.target.value,
-                                }
-                              : elemento,
-                          ),
-                        )
-                      }
-                    />
-                  </Campo>
-
-                  <Campo label="Marca">
-                    <input
-                      className={campoClass}
-                      value={vacuna.marca}
-                      onChange={(event) =>
-                        setVacunas((actuales) =>
-                          actuales.map((elemento, posicion) =>
-                            posicion === indice
-                              ? {
-                                  ...elemento,
-                                  marca: event.target.value,
-                                }
-                              : elemento,
-                          ),
-                        )
-                      }
-                    />
-                  </Campo>
-
-                  <Campo label="Laboratorio">
-                    <input
-                      className={campoClass}
-                      value={vacuna.laboratorio}
-                      onChange={(event) =>
-                        setVacunas((actuales) =>
-                          actuales.map((elemento, posicion) =>
-                            posicion === indice
-                              ? {
-                                  ...elemento,
-                                  laboratorio:
-                                    event.target.value,
-                                }
-                              : elemento,
-                          ),
-                        )
-                      }
-                    />
-                  </Campo>
-
-                  <Campo label="Lote">
-                    <input
-                      className={campoClass}
-                      value={vacuna.lote}
-                      onChange={(event) =>
-                        setVacunas((actuales) =>
-                          actuales.map((elemento, posicion) =>
-                            posicion === indice
-                              ? {
-                                  ...elemento,
-                                  lote: event.target.value,
-                                }
-                              : elemento,
-                          ),
-                        )
-                      }
-                    />
-                  </Campo>
-
-                  <Campo label="Caducidad">
-                    <input
-                      type="date"
-                      className={campoClass}
-                      value={vacuna.fechaCaducidad}
-                      onChange={(event) =>
-                        setVacunas((actuales) =>
-                          actuales.map((elemento, posicion) =>
-                            posicion === indice
-                              ? {
-                                  ...elemento,
-                                  fechaCaducidad:
-                                    event.target.value,
-                                }
-                              : elemento,
-                          ),
-                        )
-                      }
-                    />
-                  </Campo>
-
-                  <Campo label="Próxima aplicación">
-                    <input
-                      type="date"
-                      className={campoClass}
-                      value={vacuna.proximaAplicacion}
-                      onChange={(event) =>
-                        setVacunas((actuales) =>
-                          actuales.map((elemento, posicion) =>
-                            posicion === indice
-                              ? {
-                                  ...elemento,
-                                  proximaAplicacion:
-                                    event.target.value,
-                                }
-                              : elemento,
-                          ),
-                        )
-                      }
-                    />
-                  </Campo>
-
-                  <Campo label="Estado">
-                    <select
-                      className={campoClass}
-                      value={vacuna.estado}
-                      onChange={(event) =>
-                        setVacunas((actuales) =>
-                          actuales.map((elemento, posicion) =>
-                            posicion === indice
-                              ? {
-                                  ...elemento,
-                                  estado: event.target.value,
-                                }
-                              : elemento,
-                          ),
-                        )
-                      }
-                    >
-                      <option value="Aplicada">Aplicada</option>
-                      <option value="Vigente">Vigente</option>
-                      <option value="Pendiente">Pendiente</option>
-                      <option value="Pospuesta">Pospuesta</option>
-                      <option value="No indicada">
-                        No indicada
-                      </option>
-                      <option value="Contraindicada">
-                        Contraindicada
-                      </option>
-                      <option value="Pendiente de decision medica">
-                        Pendiente de decisión médica
-                      </option>
-                    </select>
-                  </Campo>
-                </div>
-              </div>
-            ))}
+              ),
+            )}
 
             {vacunas.length < 2 && (
               <Button
                 type="button"
                 variant="outline"
                 onClick={() =>
-                  setVacunas((actuales) => [
-                    ...actuales,
-                    vacunaVacia(),
-                  ])
+                  setVacunas(
+                    (actuales) => [
+                      ...actuales,
+                      vacunaVacia(),
+                    ],
+                  )
                 }
               >
                 <Plus className="h-4 w-4 mr-2" />
@@ -1222,15 +1764,21 @@ export default function MedicinaPreventivaTab({
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => setFormularioActivo(null)}
+                onClick={() =>
+                  setFormularioActivo(null)
+                }
               >
                 Cancelar
               </Button>
 
               <Button
                 type="button"
-                disabled={registrarVacunacion.isPending}
-                onClick={() => registrarVacunacion.mutate()}
+                disabled={
+                  registrarVacunacion.isPending
+                }
+                onClick={() =>
+                  registrarVacunacion.mutate()
+                }
               >
                 {registrarVacunacion.isPending
                   ? "Guardando..."
@@ -1245,7 +1793,8 @@ export default function MedicinaPreventivaTab({
           FORMULARIO DE DESPARASITACIÓN
       ====================================================== */}
 
-      {formularioActivo === "desparasitacion" && (
+      {formularioActivo ===
+        "desparasitacion" && (
         <Card className="border-primary/30">
           <CardHeader>
             <div className="flex items-center justify-between">
@@ -1258,7 +1807,9 @@ export default function MedicinaPreventivaTab({
                 type="button"
                 variant="ghost"
                 size="icon"
-                onClick={() => setFormularioActivo(null)}
+                onClick={() =>
+                  setFormularioActivo(null)
+                }
               >
                 <X className="h-5 w-5" />
               </Button>
@@ -1271,25 +1822,35 @@ export default function MedicinaPreventivaTab({
                 <input
                   type="date"
                   className={campoClass}
-                  value={desparasitacion.fechaAplicacion}
+                  value={
+                    desparasitacion.fechaAplicacion
+                  }
                   onChange={(event) =>
-                    setDesparasitacion((actual) => ({
-                      ...actual,
-                      fechaAplicacion: event.target.value,
-                    }))
+                    setDesparasitacion(
+                      (actual) => ({
+                        ...actual,
+                        fechaAplicacion:
+                          event.target.value,
+                      }),
+                    )
                   }
                 />
               </Campo>
 
-              <Campo label="Producto">
+              <Campo label="Producto aplicado">
                 <input
                   className={campoClass}
-                  value={desparasitacion.producto}
+                  value={
+                    desparasitacion.producto
+                  }
                   onChange={(event) =>
-                    setDesparasitacion((actual) => ({
-                      ...actual,
-                      producto: event.target.value,
-                    }))
+                    setDesparasitacion(
+                      (actual) => ({
+                        ...actual,
+                        producto:
+                          event.target.value,
+                      }),
+                    )
                   }
                 />
               </Campo>
@@ -1297,12 +1858,17 @@ export default function MedicinaPreventivaTab({
               <Campo label="Principio activo">
                 <input
                   className={campoClass}
-                  value={desparasitacion.principioActivo}
+                  value={
+                    desparasitacion.principioActivo
+                  }
                   onChange={(event) =>
-                    setDesparasitacion((actual) => ({
-                      ...actual,
-                      principioActivo: event.target.value,
-                    }))
+                    setDesparasitacion(
+                      (actual) => ({
+                        ...actual,
+                        principioActivo:
+                          event.target.value,
+                      }),
+                    )
                   }
                 />
               </Campo>
@@ -1310,12 +1876,17 @@ export default function MedicinaPreventivaTab({
               <Campo label="Fabricante">
                 <input
                   className={campoClass}
-                  value={desparasitacion.fabricante}
+                  value={
+                    desparasitacion.fabricante
+                  }
                   onChange={(event) =>
-                    setDesparasitacion((actual) => ({
-                      ...actual,
-                      fabricante: event.target.value,
-                    }))
+                    setDesparasitacion(
+                      (actual) => ({
+                        ...actual,
+                        fabricante:
+                          event.target.value,
+                      }),
+                    )
                   }
                 />
               </Campo>
@@ -1323,12 +1894,17 @@ export default function MedicinaPreventivaTab({
               <Campo label="Lote">
                 <input
                   className={campoClass}
-                  value={desparasitacion.lote}
+                  value={
+                    desparasitacion.lote
+                  }
                   onChange={(event) =>
-                    setDesparasitacion((actual) => ({
-                      ...actual,
-                      lote: event.target.value,
-                    }))
+                    setDesparasitacion(
+                      (actual) => ({
+                        ...actual,
+                        lote:
+                          event.target.value,
+                      }),
+                    )
                   }
                 />
               </Campo>
@@ -1336,59 +1912,43 @@ export default function MedicinaPreventivaTab({
               <Campo label="Origen">
                 <select
                   className={campoClass}
-                  value={desparasitacion.origen}
+                  value={
+                    desparasitacion.origen
+                  }
                   onChange={(event) =>
-                    setDesparasitacion((actual) => ({
-                      ...actual,
-                      origen: event.target.value,
-                    }))
+                    setDesparasitacion(
+                      (actual) => ({
+                        ...actual,
+                        origen:
+                          event.target.value,
+                      }),
+                    )
                   }
                 >
-                  <option value="Clinica">Nuestra clínica</option>
-                  <option value="Externa">Aplicación externa</option>
+                  <option value="Clinica">
+                    Nuestra clínica
+                  </option>
+
+                  <option value="Externa">
+                    Aplicación externa
+                  </option>
                 </select>
               </Campo>
 
-              <Campo label="Duración del efecto (días)">
+              <Campo label="Médico responsable">
                 <input
-                  type="number"
-                  min="1"
                   className={campoClass}
-                  value={desparasitacion.duracionDias}
-                  onChange={(event) =>
-                    setDesparasitacion((actual) => ({
-                      ...actual,
-                      duracionDias: event.target.value,
-                    }))
+                  value={
+                    desparasitacion.medicoResponsable
                   }
-                />
-              </Campo>
-
-              <Campo label="Repetir cada (días)">
-                <input
-                  type="number"
-                  min="1"
-                  className={campoClass}
-                  value={desparasitacion.frecuenciaDias}
                   onChange={(event) =>
-                    setDesparasitacion((actual) => ({
-                      ...actual,
-                      frecuenciaDias: event.target.value,
-                    }))
-                  }
-                />
-              </Campo>
-
-              <Campo label="Próxima aplicación">
-                <input
-                  type="date"
-                  className={campoClass}
-                  value={desparasitacion.proximaAplicacion}
-                  onChange={(event) =>
-                    setDesparasitacion((actual) => ({
-                      ...actual,
-                      proximaAplicacion: event.target.value,
-                    }))
+                    setDesparasitacion(
+                      (actual) => ({
+                        ...actual,
+                        medicoResponsable:
+                          event.target.value,
+                      }),
+                    )
                   }
                 />
               </Campo>
@@ -1397,26 +1957,57 @@ export default function MedicinaPreventivaTab({
                 <input
                   className={campoClass}
                   placeholder="Ej. 8.5 kg"
-                  value={desparasitacion.pesoAplicacion}
+                  value={
+                    desparasitacion.pesoAplicacion
+                  }
                   onChange={(event) =>
-                    setDesparasitacion((actual) => ({
-                      ...actual,
-                      pesoAplicacion: event.target.value,
-                    }))
+                    setDesparasitacion(
+                      (actual) => ({
+                        ...actual,
+                        pesoAplicacion:
+                          event.target.value,
+                      }),
+                    )
                   }
                 />
               </Campo>
 
-              {desparasitacion.origen === "Externa" && (
+              <Campo label="Duración de cobertura (días)">
+                <input
+                  type="number"
+                  min="1"
+                  className={campoClass}
+                  value={
+                    desparasitacion.duracionDias
+                  }
+                  onChange={(event) =>
+                    setDesparasitacion(
+                      (actual) => ({
+                        ...actual,
+                        duracionDias:
+                          event.target.value,
+                      }),
+                    )
+                  }
+                />
+              </Campo>
+
+              {desparasitacion.origen ===
+                "Externa" && (
                 <Campo label="Clínica externa">
                   <input
                     className={campoClass}
-                    value={desparasitacion.clinicaExterna}
+                    value={
+                      desparasitacion.clinicaExterna
+                    }
                     onChange={(event) =>
-                      setDesparasitacion((actual) => ({
-                        ...actual,
-                        clinicaExterna: event.target.value,
-                      }))
+                      setDesparasitacion(
+                        (actual) => ({
+                          ...actual,
+                          clinicaExterna:
+                            event.target.value,
+                        }),
+                      )
                     }
                   />
                 </Campo>
@@ -1427,12 +2018,17 @@ export default function MedicinaPreventivaTab({
               <label className="flex items-center gap-2">
                 <input
                   type="checkbox"
-                  checked={desparasitacion.cubreInternos}
+                  checked={
+                    desparasitacion.cubreInternos
+                  }
                   onChange={(event) =>
-                    setDesparasitacion((actual) => ({
-                      ...actual,
-                      cubreInternos: event.target.checked,
-                    }))
+                    setDesparasitacion(
+                      (actual) => ({
+                        ...actual,
+                        cubreInternos:
+                          event.target.checked,
+                      }),
+                    )
                   }
                 />
 
@@ -1444,12 +2040,17 @@ export default function MedicinaPreventivaTab({
               <label className="flex items-center gap-2">
                 <input
                   type="checkbox"
-                  checked={desparasitacion.cubreExternos}
+                  checked={
+                    desparasitacion.cubreExternos
+                  }
                   onChange={(event) =>
-                    setDesparasitacion((actual) => ({
-                      ...actual,
-                      cubreExternos: event.target.checked,
-                    }))
+                    setDesparasitacion(
+                      (actual) => ({
+                        ...actual,
+                        cubreExternos:
+                          event.target.checked,
+                      }),
+                    )
                   }
                 />
 
@@ -1459,16 +2060,330 @@ export default function MedicinaPreventivaTab({
               </label>
             </div>
 
-            <Campo label="Observaciones">
+            {fechaFinCobertura && (
+              <div className="rounded-xl border bg-muted/20 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Fin estimado de cobertura
+                </p>
+
+                <p className="font-bold mt-1">
+                  {mostrarFecha(
+                    fechaFinCobertura,
+                  )}
+                </p>
+
+                <p className="text-xs text-muted-foreground mt-1">
+                  Esta fecha corresponde a la
+                  duración del producto; no
+                  necesariamente será la siguiente
+                  aplicación.
+                </p>
+              </div>
+            )}
+
+            <div className="rounded-xl border border-primary/20 bg-primary/5 p-5 space-y-5">
+              <label className="flex items-start gap-3">
+                <input
+                  type="checkbox"
+                  className="mt-1"
+                  checked={
+                    desparasitacion.programarProxima
+                  }
+                  onChange={(event) =>
+                    setDesparasitacion(
+                      (actual) => ({
+                        ...actual,
+                        programarProxima:
+                          event.target.checked,
+                      }),
+                    )
+                  }
+                />
+
+                <div>
+                  <p className="font-bold">
+                    Programar próxima
+                    desparasitación
+                  </p>
+
+                  <p className="text-sm text-muted-foreground">
+                    La fecha será establecida por
+                    decisión del médico y aparecerá
+                    posteriormente en las alertas.
+                  </p>
+                </div>
+              </label>
+
+              {desparasitacion.programarProxima && (
+                <>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <Campo label="Forma de programación">
+                      <select
+                        className={campoClass}
+                        value={
+                          desparasitacion.tipoProgramacion
+                        }
+                        onChange={(event) =>
+                          setDesparasitacion(
+                            (actual) => ({
+                              ...actual,
+                              tipoProgramacion:
+                                event.target
+                                  .value as TipoProgramacion,
+
+                              cantidadProgramacion:
+                                "",
+
+                              proximaAplicacion:
+                                "",
+                            }),
+                          )
+                        }
+                      >
+                        <option value="Duracion del producto">
+                          Usar duración del
+                          producto
+                        </option>
+
+                        <option value="Dias">
+                          Cada cierto número de
+                          días
+                        </option>
+
+                        <option value="Semanas">
+                          Cada cierto número de
+                          semanas
+                        </option>
+
+                        <option value="Meses">
+                          Cada cierto número de
+                          meses
+                        </option>
+
+                        <option value="Fecha exacta">
+                          Elegir fecha exacta
+                        </option>
+                      </select>
+                    </Campo>
+
+                    {desparasitacion.tipoProgramacion ===
+                      "Dias" && (
+                      <Campo label="Número de días">
+                        <input
+                          type="number"
+                          min="1"
+                          className={campoClass}
+                          value={
+                            desparasitacion.cantidadProgramacion
+                          }
+                          onChange={(event) =>
+                            setDesparasitacion(
+                              (actual) => ({
+                                ...actual,
+                                cantidadProgramacion:
+                                  event.target
+                                    .value,
+                              }),
+                            )
+                          }
+                        />
+                      </Campo>
+                    )}
+
+                    {desparasitacion.tipoProgramacion ===
+                      "Semanas" && (
+                      <Campo label="Número de semanas">
+                        <input
+                          type="number"
+                          min="1"
+                          className={campoClass}
+                          value={
+                            desparasitacion.cantidadProgramacion
+                          }
+                          onChange={(event) =>
+                            setDesparasitacion(
+                              (actual) => ({
+                                ...actual,
+                                cantidadProgramacion:
+                                  event.target
+                                    .value,
+                              }),
+                            )
+                          }
+                        />
+                      </Campo>
+                    )}
+
+                    {desparasitacion.tipoProgramacion ===
+                      "Meses" && (
+                      <Campo label="Número de meses">
+                        <input
+                          type="number"
+                          min="1"
+                          className={campoClass}
+                          value={
+                            desparasitacion.cantidadProgramacion
+                          }
+                          onChange={(event) =>
+                            setDesparasitacion(
+                              (actual) => ({
+                                ...actual,
+                                cantidadProgramacion:
+                                  event.target
+                                    .value,
+                              }),
+                            )
+                          }
+                        />
+                      </Campo>
+                    )}
+
+                    {desparasitacion.tipoProgramacion ===
+                      "Fecha exacta" && (
+                      <Campo label="Fecha programada">
+                        <input
+                          type="date"
+                          className={campoClass}
+                          value={
+                            desparasitacion.proximaAplicacion
+                          }
+                          onChange={(event) =>
+                            setDesparasitacion(
+                              (actual) => ({
+                                ...actual,
+                                proximaAplicacion:
+                                  event.target
+                                    .value,
+                              }),
+                            )
+                          }
+                        />
+                      </Campo>
+                    )}
+
+                    <Campo label="Próximo producto">
+                      <select
+                        className={campoClass}
+                        value={
+                          desparasitacion.proximoProductoTipo
+                        }
+                        onChange={(event) =>
+                          setDesparasitacion(
+                            (actual) => ({
+                              ...actual,
+                              proximoProductoTipo:
+                                event.target
+                                  .value as ProximoProductoTipo,
+
+                              proximoProducto:
+                                "",
+                            }),
+                          )
+                        }
+                      >
+                        <option value="Mismo producto">
+                          Mismo producto
+                        </option>
+
+                        <option value="Otro producto">
+                          Otro producto
+                        </option>
+
+                        <option value="Por decidir">
+                          Por decidir
+                        </option>
+                      </select>
+                    </Campo>
+
+                    {desparasitacion.proximoProductoTipo ===
+                      "Otro producto" && (
+                      <Campo label="Producto planeado">
+                        <input
+                          className={campoClass}
+                          value={
+                            desparasitacion.proximoProducto
+                          }
+                          onChange={(event) =>
+                            setDesparasitacion(
+                              (actual) => ({
+                                ...actual,
+                                proximoProducto:
+                                  event.target
+                                    .value,
+                              }),
+                            )
+                          }
+                        />
+                      </Campo>
+                    )}
+                  </div>
+
+                  {programacionCalculada.fecha && (
+                    <div className="rounded-xl border bg-background p-4">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        Próxima desparasitación
+                        programada
+                      </p>
+
+                      <p className="font-bold text-lg mt-1">
+                        {mostrarFecha(
+                          programacionCalculada.fecha,
+                        )}
+                      </p>
+
+                      <p className="text-sm text-muted-foreground mt-1">
+                        Producto:{" "}
+                        {desparasitacion.proximoProductoTipo ===
+                        "Mismo producto"
+                          ? desparasitacion.producto ||
+                            "Mismo producto"
+                          : desparasitacion.proximoProductoTipo ===
+                              "Otro producto"
+                            ? desparasitacion.proximoProducto ||
+                              "Pendiente de especificar"
+                            : "Por decidir"}
+                      </p>
+                    </div>
+                  )}
+
+                  <Campo label="Decisión o indicaciones del médico">
+                    <textarea
+                      rows={3}
+                      className={campoClass}
+                      placeholder="Motivo del intervalo, cambio de producto, riesgo parasitario, exposición, resultado coproparasitoscópico, etc."
+                      value={
+                        desparasitacion.decisionMedica
+                      }
+                      onChange={(event) =>
+                        setDesparasitacion(
+                          (actual) => ({
+                            ...actual,
+                            decisionMedica:
+                              event.target.value,
+                          }),
+                        )
+                      }
+                    />
+                  </Campo>
+                </>
+              )}
+            </div>
+
+            <Campo label="Observaciones del registro">
               <textarea
                 rows={3}
                 className={campoClass}
-                value={desparasitacion.observaciones}
+                value={
+                  desparasitacion.observaciones
+                }
                 onChange={(event) =>
-                  setDesparasitacion((actual) => ({
-                    ...actual,
-                    observaciones: event.target.value,
-                  }))
+                  setDesparasitacion(
+                    (actual) => ({
+                      ...actual,
+                      observaciones:
+                        event.target.value,
+                    }),
+                  )
                 }
               />
             </Campo>
@@ -1477,14 +2392,18 @@ export default function MedicinaPreventivaTab({
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => setFormularioActivo(null)}
+                onClick={() =>
+                  setFormularioActivo(null)
+                }
               >
                 Cancelar
               </Button>
 
               <Button
                 type="button"
-                disabled={registrarDesparasitacion.isPending}
+                disabled={
+                  registrarDesparasitacion.isPending
+                }
                 onClick={() =>
                   registrarDesparasitacion.mutate()
                 }
@@ -1516,7 +2435,9 @@ export default function MedicinaPreventivaTab({
                   type="button"
                   variant="ghost"
                   size="icon"
-                  onClick={() => setFormularioActivo(null)}
+                  onClick={() =>
+                    setFormularioActivo(null)
+                  }
                 >
                   <X className="h-5 w-5" />
                 </Button>
@@ -1529,12 +2450,17 @@ export default function MedicinaPreventivaTab({
                   <input
                     type="date"
                     className={campoClass}
-                    value={pruebaFelina.fechaPrueba}
+                    value={
+                      pruebaFelina.fechaPrueba
+                    }
                     onChange={(event) =>
-                      setPruebaFelina((actual) => ({
-                        ...actual,
-                        fechaPrueba: event.target.value,
-                      }))
+                      setPruebaFelina(
+                        (actual) => ({
+                          ...actual,
+                          fechaPrueba:
+                            event.target.value,
+                        }),
+                      )
                     }
                   />
                 </Campo>
@@ -1543,12 +2469,17 @@ export default function MedicinaPreventivaTab({
                   <input
                     type="date"
                     className={campoClass}
-                    value={pruebaFelina.fechaResultado}
+                    value={
+                      pruebaFelina.fechaResultado
+                    }
                     onChange={(event) =>
-                      setPruebaFelina((actual) => ({
-                        ...actual,
-                        fechaResultado: event.target.value,
-                      }))
+                      setPruebaFelina(
+                        (actual) => ({
+                          ...actual,
+                          fechaResultado:
+                            event.target.value,
+                        }),
+                      )
                     }
                   />
                 </Campo>
@@ -1558,12 +2489,17 @@ export default function MedicinaPreventivaTab({
                     type="number"
                     min="0"
                     className={campoClass}
-                    value={pruebaFelina.edadMeses}
+                    value={
+                      pruebaFelina.edadMeses
+                    }
                     onChange={(event) =>
-                      setPruebaFelina((actual) => ({
-                        ...actual,
-                        edadMeses: event.target.value,
-                      }))
+                      setPruebaFelina(
+                        (actual) => ({
+                          ...actual,
+                          edadMeses:
+                            event.target.value,
+                        }),
+                      )
                     }
                   />
                 </Campo>
@@ -1571,17 +2507,31 @@ export default function MedicinaPreventivaTab({
                 <Campo label="Resultado FIV">
                   <select
                     className={campoClass}
-                    value={pruebaFelina.resultadoFiv}
+                    value={
+                      pruebaFelina.resultadoFiv
+                    }
                     onChange={(event) =>
-                      setPruebaFelina((actual) => ({
-                        ...actual,
-                        resultadoFiv: event.target.value,
-                      }))
+                      setPruebaFelina(
+                        (actual) => ({
+                          ...actual,
+                          resultadoFiv:
+                            event.target.value,
+                        }),
+                      )
                     }
                   >
-                    <option value="Pendiente">Pendiente</option>
-                    <option value="Negativo">Negativo</option>
-                    <option value="Positivo">Positivo</option>
+                    <option value="Pendiente">
+                      Pendiente
+                    </option>
+
+                    <option value="Negativo">
+                      Negativo
+                    </option>
+
+                    <option value="Positivo">
+                      Positivo
+                    </option>
+
                     <option value="Indeterminado">
                       Indeterminado
                     </option>
@@ -1591,17 +2541,31 @@ export default function MedicinaPreventivaTab({
                 <Campo label="Resultado FeLV">
                   <select
                     className={campoClass}
-                    value={pruebaFelina.resultadoFelv}
+                    value={
+                      pruebaFelina.resultadoFelv
+                    }
                     onChange={(event) =>
-                      setPruebaFelina((actual) => ({
-                        ...actual,
-                        resultadoFelv: event.target.value,
-                      }))
+                      setPruebaFelina(
+                        (actual) => ({
+                          ...actual,
+                          resultadoFelv:
+                            event.target.value,
+                        }),
+                      )
                     }
                   >
-                    <option value="Pendiente">Pendiente</option>
-                    <option value="Negativo">Negativo</option>
-                    <option value="Positivo">Positivo</option>
+                    <option value="Pendiente">
+                      Pendiente
+                    </option>
+
+                    <option value="Negativo">
+                      Negativo
+                    </option>
+
+                    <option value="Positivo">
+                      Positivo
+                    </option>
+
                     <option value="Indeterminado">
                       Indeterminado
                     </option>
@@ -1611,20 +2575,35 @@ export default function MedicinaPreventivaTab({
                 <Campo label="Decisión sobre leucemia">
                   <select
                     className={campoClass}
-                    value={pruebaFelina.decisionLeucemia}
+                    value={
+                      pruebaFelina.decisionLeucemia
+                    }
                     onChange={(event) =>
-                      setPruebaFelina((actual) => ({
-                        ...actual,
-                        decisionLeucemia: event.target.value,
-                      }))
+                      setPruebaFelina(
+                        (actual) => ({
+                          ...actual,
+                          decisionLeucemia:
+                            event.target.value,
+                        }),
+                      )
                     }
                   >
-                    <option value="Pendiente">Pendiente</option>
-                    <option value="Aplicar">Aplicar</option>
-                    <option value="Posponer">Posponer</option>
+                    <option value="Pendiente">
+                      Pendiente
+                    </option>
+
+                    <option value="Aplicar">
+                      Aplicar
+                    </option>
+
+                    <option value="Posponer">
+                      Posponer
+                    </option>
+
                     <option value="No indicada">
                       No indicada
                     </option>
+
                     <option value="Contraindicada">
                       Contraindicada
                     </option>
@@ -1635,13 +2614,17 @@ export default function MedicinaPreventivaTab({
                   <input
                     type="date"
                     className={campoClass}
-                    value={pruebaFelina.fechaReevaluacion}
+                    value={
+                      pruebaFelina.fechaReevaluacion
+                    }
                     onChange={(event) =>
-                      setPruebaFelina((actual) => ({
-                        ...actual,
-                        fechaReevaluacion:
-                          event.target.value,
-                      }))
+                      setPruebaFelina(
+                        (actual) => ({
+                          ...actual,
+                          fechaReevaluacion:
+                            event.target.value,
+                        }),
+                      )
                     }
                   />
                 </Campo>
@@ -1649,12 +2632,17 @@ export default function MedicinaPreventivaTab({
                 <Campo label="Laboratorio">
                   <input
                     className={campoClass}
-                    value={pruebaFelina.laboratorio}
+                    value={
+                      pruebaFelina.laboratorio
+                    }
                     onChange={(event) =>
-                      setPruebaFelina((actual) => ({
-                        ...actual,
-                        laboratorio: event.target.value,
-                      }))
+                      setPruebaFelina(
+                        (actual) => ({
+                          ...actual,
+                          laboratorio:
+                            event.target.value,
+                        }),
+                      )
                     }
                   />
                 </Campo>
@@ -1662,15 +2650,23 @@ export default function MedicinaPreventivaTab({
                 <Campo label="Origen">
                   <select
                     className={campoClass}
-                    value={pruebaFelina.origen}
+                    value={
+                      pruebaFelina.origen
+                    }
                     onChange={(event) =>
-                      setPruebaFelina((actual) => ({
-                        ...actual,
-                        origen: event.target.value,
-                      }))
+                      setPruebaFelina(
+                        (actual) => ({
+                          ...actual,
+                          origen:
+                            event.target.value,
+                        }),
+                      )
                     }
                   >
-                    <option value="Clinica">Nuestra clínica</option>
+                    <option value="Clinica">
+                      Nuestra clínica
+                    </option>
+
                     <option value="Externa">
                       Prueba externa
                     </option>
@@ -1682,12 +2678,17 @@ export default function MedicinaPreventivaTab({
                 <textarea
                   rows={2}
                   className={campoClass}
-                  value={pruebaFelina.motivoDecision}
+                  value={
+                    pruebaFelina.motivoDecision
+                  }
                   onChange={(event) =>
-                    setPruebaFelina((actual) => ({
-                      ...actual,
-                      motivoDecision: event.target.value,
-                    }))
+                    setPruebaFelina(
+                      (actual) => ({
+                        ...actual,
+                        motivoDecision:
+                          event.target.value,
+                      }),
+                    )
                   }
                 />
               </Campo>
@@ -1696,12 +2697,17 @@ export default function MedicinaPreventivaTab({
                 <textarea
                   rows={3}
                   className={campoClass}
-                  value={pruebaFelina.observaciones}
+                  value={
+                    pruebaFelina.observaciones
+                  }
                   onChange={(event) =>
-                    setPruebaFelina((actual) => ({
-                      ...actual,
-                      observaciones: event.target.value,
-                    }))
+                    setPruebaFelina(
+                      (actual) => ({
+                        ...actual,
+                        observaciones:
+                          event.target.value,
+                      }),
+                    )
                   }
                 />
               </Campo>
@@ -1710,15 +2716,21 @@ export default function MedicinaPreventivaTab({
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => setFormularioActivo(null)}
+                  onClick={() =>
+                    setFormularioActivo(null)
+                  }
                 >
                   Cancelar
                 </Button>
 
                 <Button
                   type="button"
-                  disabled={registrarPruebaFelina.isPending}
-                  onClick={() => registrarPruebaFelina.mutate()}
+                  disabled={
+                    registrarPruebaFelina.isPending
+                  }
+                  onClick={() =>
+                    registrarPruebaFelina.mutate()
+                  }
                 >
                   {registrarPruebaFelina.isPending
                     ? "Guardando..."
@@ -1733,7 +2745,10 @@ export default function MedicinaPreventivaTab({
           HISTORIAL
       ====================================================== */}
 
-      <Tabs defaultValue="vacunas" className="space-y-6">
+      <Tabs
+        defaultValue="vacunas"
+        className="space-y-6"
+      >
         <TabsList className="w-full justify-start overflow-x-auto">
           <TabsTrigger value="vacunas">
             <Syringe className="h-4 w-4 mr-2" />
@@ -1753,8 +2768,12 @@ export default function MedicinaPreventivaTab({
           )}
         </TabsList>
 
-        <TabsContent value="vacunas" className="space-y-4">
-          {data.visitasVacunacion.length === 0 ? (
+        <TabsContent
+          value="vacunas"
+          className="space-y-4"
+        >
+          {data.visitasVacunacion.length ===
+          0 ? (
             <div className="rounded-xl border-2 border-dashed py-16 text-center text-muted-foreground">
               <Syringe className="h-12 w-12 mx-auto mb-4 opacity-20" />
 
@@ -1763,72 +2782,311 @@ export default function MedicinaPreventivaTab({
               </p>
             </div>
           ) : (
-            data.visitasVacunacion.map((visita) => (
-              <Card key={visita.id}>
-                <CardHeader className="pb-3">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <CardTitle className="text-base flex items-center gap-2">
-                      <Calendar className="h-4 w-4 text-primary" />
+            data.visitasVacunacion.map(
+              (visita) => (
+                <Card key={visita.id}>
+                  <CardHeader className="pb-3">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <CardTitle className="text-base flex items-center gap-2">
+                        <Calendar className="h-4 w-4 text-primary" />
 
-                      {mostrarFecha(visita.fechaVisita)}
-                    </CardTitle>
+                        {mostrarFecha(
+                          visita.fechaVisita,
+                        )}
+                      </CardTitle>
 
-                    <Badge variant="outline">
-                      {visita.origen === "Externa"
-                        ? "Aplicación externa"
-                        : "Nuestra clínica"}
-                    </Badge>
-                  </div>
-                </CardHeader>
+                      <Badge variant="outline">
+                        {visita.origen ===
+                        "Externa"
+                          ? "Aplicación externa"
+                          : "Nuestra clínica"}
+                      </Badge>
+                    </div>
+                  </CardHeader>
 
-                <CardContent className="space-y-3">
-                  {visita.vacunas.map((vacuna) => (
-                    <div
-                      key={vacuna.id}
-                      className="rounded-xl border p-4 flex flex-col md:flex-row md:items-center justify-between gap-4"
-                    >
-                      <div className="space-y-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <p className="font-bold">
-                            {vacuna.vacuna}
-                          </p>
+                  <CardContent className="space-y-3">
+                    {visita.vacunas.map(
+                      (vacuna) => (
+                        <div
+                          key={vacuna.id}
+                          className="rounded-xl border p-4 flex flex-col md:flex-row md:items-center justify-between gap-4"
+                        >
+                          <div className="space-y-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="font-bold">
+                                {
+                                  vacuna.vacuna
+                                }
+                              </p>
 
-                          <Badge
-                            className={`border ${estadoColor(
-                              vacuna.estado,
-                            )}`}
+                              <Badge
+                                className={`border ${estadoColor(
+                                  vacuna.estado,
+                                )}`}
+                              >
+                                {
+                                  vacuna.estado
+                                }
+                              </Badge>
+                            </div>
+
+                            <p className="text-sm text-muted-foreground">
+                              Aplicación:{" "}
+                              {mostrarFecha(
+                                vacuna.fechaAplicacion,
+                              )}
+                            </p>
+
+                            <p className="text-sm text-muted-foreground">
+                              Próxima:{" "}
+                              {mostrarFecha(
+                                vacuna.proximaAplicacion,
+                              )}
+                            </p>
+
+                            {(vacuna.marca ||
+                              vacuna.laboratorio ||
+                              vacuna.lote) && (
+                              <p className="text-xs text-muted-foreground">
+                                {[
+                                  vacuna.marca,
+                                  vacuna.laboratorio,
+                                ]
+                                  .filter(
+                                    Boolean,
+                                  )
+                                  .join(
+                                    " · ",
+                                  )}
+
+                                {vacuna.lote
+                                  ? ` · Lote ${vacuna.lote}`
+                                  : ""}
+                              </p>
+                            )}
+                          </div>
+
+                          <Button
+                            type="button"
+                            size="icon"
+                            variant="ghost"
+                            className="text-destructive"
+                            onClick={() =>
+                              eliminarRegistro(
+                                `vacunaciones/${vacuna.id}`,
+                                "esta vacunación",
+                              )
+                            }
                           >
-                            {vacuna.estado}
-                          </Badge>
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
                         </div>
+                      ),
+                    )}
+                  </CardContent>
+                </Card>
+              ),
+            )
+          )}
+        </TabsContent>
 
+        <TabsContent
+          value="desparasitaciones"
+          className="space-y-4"
+        >
+          {data.desparasitaciones.length ===
+          0 ? (
+            <div className="rounded-xl border-2 border-dashed py-16 text-center text-muted-foreground">
+              <Bug className="h-12 w-12 mx-auto mb-4 opacity-20" />
+
+              <p className="font-semibold text-foreground">
+                Sin desparasitaciones
+                registradas
+              </p>
+            </div>
+          ) : (
+            data.desparasitaciones.map(
+              (registro) => (
+                <Card key={registro.id}>
+                  <CardContent className="p-5 flex flex-col md:flex-row md:items-start justify-between gap-4">
+                    <div className="space-y-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="font-bold text-lg">
+                          {registro.producto}
+                        </p>
+
+                        {registro.cubreInternos && (
+                          <Badge variant="outline">
+                            Internos
+                          </Badge>
+                        )}
+
+                        {registro.cubreExternos && (
+                          <Badge variant="outline">
+                            Externos
+                          </Badge>
+                        )}
+                      </div>
+
+                      <div className="space-y-1">
                         <p className="text-sm text-muted-foreground">
                           Aplicación:{" "}
                           {mostrarFecha(
-                            vacuna.fechaAplicacion,
+                            registro.fechaAplicacion,
                           )}
                         </p>
 
                         <p className="text-sm text-muted-foreground">
-                          Próxima:{" "}
+                          Fin de cobertura:{" "}
                           {mostrarFecha(
-                            vacuna.proximaAplicacion,
+                            registro.fechaFinCobertura,
+                          )}
+                        </p>
+                      </div>
+
+                      {registro.principioActivo && (
+                        <p className="text-xs text-muted-foreground">
+                          Principio activo:{" "}
+                          {
+                            registro.principioActivo
+                          }
+                        </p>
+                      )}
+
+                      {registro.programarProxima &&
+                        registro.proximaAplicacion && (
+                          <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 space-y-1">
+                            <p className="text-xs font-semibold uppercase tracking-wide text-primary">
+                              Próxima desparasitación
+                              programada
+                            </p>
+
+                            <p className="font-bold">
+                              {mostrarFecha(
+                                registro.proximaAplicacion,
+                              )}
+                            </p>
+
+                            <p className="text-sm text-muted-foreground">
+                              Producto:{" "}
+                              {registro.proximoProductoTipo ===
+                              "Mismo producto"
+                                ? registro.producto
+                                : registro.proximoProductoTipo ===
+                                    "Otro producto"
+                                  ? registro.proximoProducto ||
+                                    "Sin especificar"
+                                  : "Por decidir"}
+                            </p>
+
+                            {registro.tipoProgramacion && (
+                              <p className="text-xs text-muted-foreground">
+                                Programación:{" "}
+                                {
+                                  registro.tipoProgramacion
+                                }
+                              </p>
+                            )}
+
+                            {registro.decisionMedica && (
+                              <p className="text-sm mt-2">
+                                <span className="font-semibold">
+                                  Decisión
+                                  médica:
+                                </span>{" "}
+                                {
+                                  registro.decisionMedica
+                                }
+                              </p>
+                            )}
+                          </div>
+                        )}
+
+                      {!registro.programarProxima && (
+                        <Badge variant="secondary">
+                          Sin próxima fecha
+                          programada
+                        </Badge>
+                      )}
+                    </div>
+
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="ghost"
+                      className="text-destructive shrink-0"
+                      onClick={() =>
+                        eliminarRegistro(
+                          `desparasitaciones/${registro.id}`,
+                          "esta desparasitación",
+                        )
+                      }
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </CardContent>
+                </Card>
+              ),
+            )
+          )}
+        </TabsContent>
+
+        {especieNormalizada === "Gato" && (
+          <TabsContent
+            value="pruebas"
+            className="space-y-4"
+          >
+            {data.pruebasFelinas.length ===
+            0 ? (
+              <div className="rounded-xl border-2 border-dashed py-16 text-center text-muted-foreground">
+                <TestTube2 className="h-12 w-12 mx-auto mb-4 opacity-20" />
+
+                <p className="font-semibold text-foreground">
+                  Sin pruebas FIV/FeLV
+                  registradas
+                </p>
+              </div>
+            ) : (
+              data.pruebasFelinas.map(
+                (prueba) => (
+                  <Card key={prueba.id}>
+                    <CardContent className="p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                      <div className="space-y-2">
+                        <p className="font-bold">
+                          Prueba FIV/FeLV
+                        </p>
+
+                        <p className="text-sm text-muted-foreground">
+                          Fecha:{" "}
+                          {mostrarFecha(
+                            prueba.fechaPrueba,
                           )}
                         </p>
 
-                        {(vacuna.marca ||
-                          vacuna.laboratorio ||
-                          vacuna.lote) && (
-                          <p className="text-xs text-muted-foreground">
-                            {[vacuna.marca, vacuna.laboratorio]
-                              .filter(Boolean)
-                              .join(" · ")}
+                        <div className="flex flex-wrap gap-2">
+                          <Badge variant="outline">
+                            FIV:{" "}
+                            {
+                              prueba.resultadoFiv
+                            }
+                          </Badge>
 
-                            {vacuna.lote
-                              ? ` · Lote ${vacuna.lote}`
-                              : ""}
-                          </p>
-                        )}
+                          <Badge variant="outline">
+                            FeLV:{" "}
+                            {
+                              prueba.resultadoFelv
+                            }
+                          </Badge>
+
+                          {prueba.decisionLeucemia && (
+                            <Badge className="bg-primary/10 text-primary border-primary/20">
+                              Leucemia:{" "}
+                              {
+                                prueba.decisionLeucemia
+                              }
+                            </Badge>
+                          )}
+                        </div>
                       </div>
 
                       <Button
@@ -1838,157 +3096,17 @@ export default function MedicinaPreventivaTab({
                         className="text-destructive"
                         onClick={() =>
                           eliminarRegistro(
-                            `vacunaciones/${vacuna.id}`,
-                            "esta vacunación",
+                            `pruebas-felinas/${prueba.id}`,
+                            "esta prueba",
                           )
                         }
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
-                    </div>
-                  ))}
-                </CardContent>
-              </Card>
-            ))
-          )}
-        </TabsContent>
-
-        <TabsContent
-          value="desparasitaciones"
-          className="space-y-4"
-        >
-          {data.desparasitaciones.length === 0 ? (
-            <div className="rounded-xl border-2 border-dashed py-16 text-center text-muted-foreground">
-              <Bug className="h-12 w-12 mx-auto mb-4 opacity-20" />
-
-              <p className="font-semibold text-foreground">
-                Sin desparasitaciones registradas
-              </p>
-            </div>
-          ) : (
-            data.desparasitaciones.map((registro) => (
-              <Card key={registro.id}>
-                <CardContent className="p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                  <div className="space-y-2">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="font-bold text-lg">
-                        {registro.producto}
-                      </p>
-
-                      {registro.cubreInternos && (
-                        <Badge variant="outline">
-                          Internos
-                        </Badge>
-                      )}
-
-                      {registro.cubreExternos && (
-                        <Badge variant="outline">
-                          Externos
-                        </Badge>
-                      )}
-                    </div>
-
-                    <p className="text-sm text-muted-foreground">
-                      Aplicación:{" "}
-                      {mostrarFecha(
-                        registro.fechaAplicacion,
-                      )}
-                    </p>
-
-                    <p className="text-sm text-muted-foreground">
-                      Próxima:{" "}
-                      {mostrarFecha(
-                        registro.proximaAplicacion,
-                      )}
-                    </p>
-
-                    {registro.principioActivo && (
-                      <p className="text-xs text-muted-foreground">
-                        Principio activo:{" "}
-                        {registro.principioActivo}
-                      </p>
-                    )}
-                  </div>
-
-                  <Button
-                    type="button"
-                    size="icon"
-                    variant="ghost"
-                    className="text-destructive"
-                    onClick={() =>
-                      eliminarRegistro(
-                        `desparasitaciones/${registro.id}`,
-                        "esta desparasitación",
-                      )
-                    }
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </CardContent>
-              </Card>
-            ))
-          )}
-        </TabsContent>
-
-        {especieNormalizada === "Gato" && (
-          <TabsContent value="pruebas" className="space-y-4">
-            {data.pruebasFelinas.length === 0 ? (
-              <div className="rounded-xl border-2 border-dashed py-16 text-center text-muted-foreground">
-                <TestTube2 className="h-12 w-12 mx-auto mb-4 opacity-20" />
-
-                <p className="font-semibold text-foreground">
-                  Sin pruebas FIV/FeLV registradas
-                </p>
-              </div>
-            ) : (
-              data.pruebasFelinas.map((prueba) => (
-                <Card key={prueba.id}>
-                  <CardContent className="p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                    <div className="space-y-2">
-                      <p className="font-bold">
-                        Prueba FIV/FeLV
-                      </p>
-
-                      <p className="text-sm text-muted-foreground">
-                        Fecha:{" "}
-                        {mostrarFecha(prueba.fechaPrueba)}
-                      </p>
-
-                      <div className="flex flex-wrap gap-2">
-                        <Badge variant="outline">
-                          FIV: {prueba.resultadoFiv}
-                        </Badge>
-
-                        <Badge variant="outline">
-                          FeLV: {prueba.resultadoFelv}
-                        </Badge>
-
-                        {prueba.decisionLeucemia && (
-                          <Badge className="bg-primary/10 text-primary border-primary/20">
-                            Leucemia:{" "}
-                            {prueba.decisionLeucemia}
-                          </Badge>
-                        )}
-                      </div>
-                    </div>
-
-                    <Button
-                      type="button"
-                      size="icon"
-                      variant="ghost"
-                      className="text-destructive"
-                      onClick={() =>
-                        eliminarRegistro(
-                          `pruebas-felinas/${prueba.id}`,
-                          "esta prueba",
-                        )
-                      }
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </CardContent>
-                </Card>
-              ))
+                    </CardContent>
+                  </Card>
+                ),
+              )
             )}
           </TabsContent>
         )}
@@ -1998,9 +3116,11 @@ export default function MedicinaPreventivaTab({
         <ShieldCheck className="h-5 w-5 text-primary mt-0.5 shrink-0" />
 
         <p className="text-sm text-muted-foreground">
-          Los esquemas y fechas sugeridas son auxiliares. La decisión
-          final de aplicación, intervalo, refuerzo o contraindicación
-          permanece bajo criterio médico.
+          Los esquemas, fechas de cobertura y
+          programaciones son auxiliares. La decisión
+          final de aplicación, intervalo, cambio de
+          producto o contraindicación permanece bajo
+          criterio médico.
         </p>
       </div>
     </div>

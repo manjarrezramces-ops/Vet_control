@@ -64,7 +64,21 @@ export const desparasitacionesTable = pgTable("desparasitaciones", {
   proximaAplicacion: date("proxima_aplicacion", {
     mode: "string",
   }),
+  programarProxima: boolean("programar_proxima")
+    .notNull()
+    .default(false),
 
+  tipoProgramacion: text("tipo_programacion"),
+
+  proximoProductoTipo: text("proximo_producto_tipo"),
+
+  proximoProducto: text("proximo_producto"),
+
+  decisionMedica: text("decision_medica"),
+
+  fechaFinCobertura: date("fecha_fin_cobertura", {
+    mode: "string",
+  }),
   pesoAplicacion: text("peso_aplicacion"),
 
   observaciones: text("observaciones"),
