@@ -120,6 +120,7 @@ type PruebaFelina = {
   motivoDecision: string | null;
   fechaReevaluacion: string | null;
   observaciones: string | null;
+  archivoResultado: string | null;
 };
 
 type VacunaSugerida = {
@@ -505,6 +506,11 @@ export default function MedicinaPreventivaTab({
   /* ---------------------------------------------------------
      ESTADO DE PRUEBA FELINA
   --------------------------------------------------------- */
+
+  const [
+    archivoPruebaFelina,
+    setArchivoPruebaFelina,
+  ] = useState<File | null>(null);
 
   const [pruebaFelina, setPruebaFelina] =
     useState({
@@ -1031,6 +1037,103 @@ export default function MedicinaPreventivaTab({
   const registrarPruebaFelina =
     useMutation({
       mutationFn: async () => {
+        let archivoResultado:
+          | string
+          | undefined;
+
+        if (archivoPruebaFelina) {
+          const tiposPermitidos = [
+            "image/png",
+            "image/jpeg",
+            "image/jpg",
+            "application/pdf",
+          ];
+
+          if (
+            !tiposPermitidos.includes(
+              archivoPruebaFelina.type,
+            )
+          ) {
+            throw new Error(
+              "El archivo debe ser PNG, JPG, JPEG o PDF.",
+            );
+          }
+
+          if (
+            archivoPruebaFelina.size >
+            25 * 1024 * 1024
+          ) {
+            throw new Error(
+              "El archivo no puede superar 25 MB.",
+            );
+          }
+
+          const solicitud = await fetch(
+            `${BASE}/api/storage/uploads/request-url`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type":
+                  "application/json",
+              },
+              body: JSON.stringify({
+                name:
+                  archivoPruebaFelina.name,
+                size:
+                  archivoPruebaFelina.size,
+                contentType:
+                  archivoPruebaFelina.type,
+              }),
+            },
+          );
+
+          const datosSolicitud =
+            await solicitud
+              .json()
+              .catch(() => null);
+
+          if (!solicitud.ok) {
+            throw new Error(
+              datosSolicitud?.error ||
+                "No se pudo preparar la carga del archivo.",
+            );
+          }
+
+          const subida = await fetch(
+            datosSolicitud.uploadURL,
+            {
+              method: "PUT",
+              headers: {
+                "Content-Type":
+                  archivoPruebaFelina.type,
+              },
+              body: archivoPruebaFelina,
+            },
+          );
+
+          const datosSubida =
+            await subida
+              .json()
+              .catch(() => null);
+
+          if (!subida.ok) {
+            throw new Error(
+              datosSubida?.error ||
+                "No se pudo subir el archivo.",
+            );
+          }
+
+          archivoResultado =
+            datosSubida?.objectPath ||
+            datosSolicitud?.objectPath;
+
+          if (!archivoResultado) {
+            throw new Error(
+              "El archivo se subió, pero no se recibió su ruta.",
+            );
+          }
+        }
+
         const respuesta = await fetch(
           `${BASE}/api/pacientes/${pacienteId}/pruebas-felinas`,
           {
@@ -1105,7 +1208,9 @@ export default function MedicinaPreventivaTab({
                 ),
 
               comprobantePresentado:
-                pruebaFelina.comprobantePresentado,
+                Boolean(archivoResultado),
+
+              archivoResultado,
             }),
           },
         );
@@ -1126,6 +1231,27 @@ export default function MedicinaPreventivaTab({
 
       onSuccess: async () => {
         await actualizarHistorial();
+
+        setArchivoPruebaFelina(null);
+
+        setPruebaFelina({
+          fechaPrueba: fechaActual(),
+          fechaResultado: fechaActual(),
+          origen: "Clinica",
+          laboratorio: "",
+          clinicaExterna: "",
+          medicoResponsable: "",
+          medicoExterno: "",
+          resultadoFiv: "Pendiente",
+          resultadoFelv: "Pendiente",
+          edadMeses: "",
+          decisionLeucemia: "Pendiente",
+          motivoDecision: "",
+          fechaReevaluacion: "",
+          observaciones: "",
+          comprobantePresentado: false,
+        });
+
         setFormularioActivo(null);
 
         toast({
@@ -2929,6 +3055,31 @@ export default function MedicinaPreventivaTab({
                 </Campo>
               </div>
 
+              <Campo label="Archivo del resultado">
+                <input
+                  type="file"
+                  accept=".png,.jpg,.jpeg,.pdf,image/png,image/jpeg,application/pdf"
+                  className={campoClass}
+                  onChange={(event) =>
+                    setArchivoPruebaFelina(
+                      event.target.files?.[0] ||
+                        null,
+                    )
+                  }
+                />
+
+                <span className="block text-xs text-muted-foreground">
+                  PNG, JPG, JPEG o PDF. Máximo 25 MB.
+                </span>
+
+                {archivoPruebaFelina && (
+                  <span className="block text-sm font-medium">
+                    Archivo seleccionado:{" "}
+                    {archivoPruebaFelina.name}
+                  </span>
+                )}
+              </Campo>
+
               <Campo label="Motivo de decisión">
                 <textarea
                   rows={2}
@@ -3371,6 +3522,23 @@ export default function MedicinaPreventivaTab({
                             </Badge>
                           )}
                         </div>
+
+                        {prueba.archivoResultado && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            asChild
+                          >
+                            <a
+                              href={`${BASE}/api/storage${prueba.archivoResultado}`}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              Ver archivo del resultado
+                            </a>
+                          </Button>
+                        )}
                       </div>
 
                       <Button
