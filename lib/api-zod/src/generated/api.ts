@@ -24,8 +24,10 @@ export const GetDashboardResponse = zod.object({
     "consultas": zod.number(),
     "consultasHoy": zod.number(),
     "proximasCitas": zod.number(),
-    "hospitalizados": zod.number()
+    "hospitalizados": zod.number(),
+    "medicinaPreventiva": zod.number()
   }),
+
   "recientes": zod.array(zod.object({
     "id": zod.number(),
     "fecha": zod.string(),
@@ -34,6 +36,7 @@ export const GetDashboardResponse = zod.object({
     "propietario": zod.string(),
     "motivo": zod.string()
   })),
+
   "proximasCitasLista": zod.array(zod.object({
     "id": zod.number(),
     "pacienteId": zod.number(),
@@ -42,6 +45,7 @@ export const GetDashboardResponse = zod.object({
     "proximaCita": zod.string(),
     "motivo": zod.string().nullish()
   })),
+
   "hospitalizadosLista": zod.array(zod.object({
     "id": zod.number(),
     "pacienteId": zod.number(),
@@ -50,6 +54,30 @@ export const GetDashboardResponse = zod.object({
     "estado": zod.string(),
     "fechaIngreso": zod.string(),
     "motivo": zod.string()
+  })),
+
+  "visitasPreventivas": zod.array(zod.object({
+    "id": zod.number(),
+    "pacienteId": zod.number(),
+    "paciente": zod.string(),
+    "propietario": zod.string(),
+
+    "tipo": zod.enum([
+      "Vacunación",
+      "Desparasitación"
+    ]),
+
+    "concepto": zod.string(),
+    "fecha": zod.string(),
+
+    "estado": zod.enum([
+      "Atrasada",
+      "Hoy",
+      "Próxima"
+    ]),
+
+    "diasDiferencia": zod.number(),
+    "detalle": zod.string().nullish()
   }))
 });
 
